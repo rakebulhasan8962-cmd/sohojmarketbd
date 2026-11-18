@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-header: #73385E;
+  --color-brand-button: #A2AB34;
+  --color-brand-button-hover: #858E25;
+  --color-brand-heading: #4B203D;
+  --color-brand-offer: #F3F5DC;
+  --color-brand-text: #333333;
+  --color-brand-bg: #FFFFFF;
+}
+
+body {
+  background-color: var(--color-brand-bg);
+  color: var(--color-brand-text);
+  font-family: var(--font-hind-siliguri), sans-serif;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-brand-heading);
+}
+
+/* স্ক্রিনশটের মতো বড় ও আকর্ষণীয় ফন্ট সাইজ */
+.hero-title {
+  font-size: clamp(2.5rem, 5vw, 4rem); /* প্রায় 64px পর্যন্ত বড় হবে */
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.section-title {
+  font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+}
+@import "tailwindcss";
+
+/* পেজ স্ক্রলিং স্মুথ করার জন্য */
+html {
+  scroll-behavior: smooth;
+}
+@layer base {
+  html {
+    font-size: 17px; /* ডিফল্ট 16px থাকে, 17px বা 18px দিলে সব লেখা সুন্দর বড় দেখাবে */
+  }
+}
