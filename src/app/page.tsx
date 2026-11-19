@@ -198,7 +198,7 @@ export default async function HomePage() {
                     অর্ডার করতে চাই
                   </a>
                   <a 
-                    href="https://wa.me/8801823902192" 
+                    href="https://wa.me/8801639193531" 
                     target="_blank" 
                     rel="noreferrer" 
                     className="bg-[#2E8B57] hover:bg-[#246B43] text-white px-9 py-4 rounded-xl font-bold shadow-md hover:shadow-lg transform hover:-translate-y-1 active:scale-95 transition-all duration-200 flex items-center gap-2"
@@ -267,7 +267,7 @@ export default async function HomePage() {
               ))}
             </div>
             <a 
-              href="https://wa.me/8801823902192" 
+              href="https://wa.me/8801639193531" 
               target="_blank" 
               rel="noreferrer" 
               className="w-full mt-6 bg-[#2E8B57] hover:bg-[#246B43] text-white py-4 rounded-xl font-bold shadow-md hover:shadow-lg transform hover:-translate-y-1 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"

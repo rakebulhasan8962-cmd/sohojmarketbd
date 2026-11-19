@@ -94,12 +94,12 @@ export async function getWhatsappNumber() {
   try {
     const [res] = await db.select().from(settings).limit(1);
     if (!res) {
-      return "8801823902192";
+      return "8801639193531";
     }
-    return (res as any).whatsappNumber || "8801823902192";
+    return (res as any).whatsappNumber || "8801639193531";
   } catch (error) {
     console.warn("Settings table query failed, returning default whatsapp number.");
-    return "8801823902192";
+    return "8801639193531";
   }
 }
 

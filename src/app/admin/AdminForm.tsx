@@ -84,12 +84,12 @@ export default function AdminForm({ defaultValues }: { defaultValues: any }) {
           </label>
           <input
             type="text"
-            value={content.adminWhatsApp || "8801823902192"}
+            value={content.adminWhatsApp || "8801639193531"}
             onChange={e => setContent({...content, adminWhatsApp: e.target.value})}
-            placeholder="8801823902192"
+            placeholder="8801639193531"
             className="w-full max-w-md border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black bg-white"
           />
-          <p className="text-xs text-gray-400 mt-1">প্লাস (+) চিহ্ন ছাড়াই লিখবেন, যেমন: 8801823902192</p>
+          <p className="text-xs text-gray-400 mt-1">প্লাস (+) চিহ্ন ছাড়াই লিখবেন, যেমন: 8801639193531</p>
         </div>
       </section>
 

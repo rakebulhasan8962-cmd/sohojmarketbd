@@ -41,7 +41,7 @@ export type SiteContent = {
 };
 
 export const defaultContent: SiteContent = {
-  adminWhatsApp: "8801823902192",
+  adminWhatsApp: "8801639193531",
   hero: {
     badge: "Premium Khejur Gur",
     title: "প্রতিটি কামড়ে খাঁটি গ্রামবাংলার স্বাদ",

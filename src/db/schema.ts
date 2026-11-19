@@ -8,7 +8,7 @@ export const siteContent = pgTable("site_content", {
 
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
-  whatsappNumber: varchar("whatsapp_number", { length: 50 }).notNull().default("8801823902192"),
+  whatsappNumber: varchar("whatsapp_number", { length: 50 }).notNull().default("8801639193531"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

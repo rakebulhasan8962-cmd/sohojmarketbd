@@ -20,7 +20,7 @@ export default function CheckoutForm({ pricing }: { pricing: any }) {
   const [trackedOrders, setTrackedOrders] = useState<any[] | null>(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
 
-  const ADMIN_WHATSAPP = "8801823902192";
+  const ADMIN_WHATSAPP = "8801639193531";
 
   const districts = Object.keys(bdLocations);
   const availableThanas = bdLocations[district] || [];
