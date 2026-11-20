@@ -1,14 +1,14 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAllOrders, getWhatsappNumber } from "@/app/actions";
+import { getAllOrders, getWhatsappNumber } from "../actions";
 import AdminDashboard from "./AdminDashboard";
-import { db } from "@/db";
-import { siteContent } from "@/db/schema";
-import { defaultContent, SiteContent } from "@/lib/data";
+import { db } from "../../db";
+import { siteContent } from "../../db/schema";
+import { defaultContent, SiteContent } from "../../lib/data";
 
 export const dynamic = "force-dynamic";
 
-async function getMergedContent(): Promise<SiteContent> {
+async function getMergedContent(): Promise<any> {
   try {
     const result = await db.select().from(siteContent).limit(1);
     if (result.length > 0 && result[0].content) {
@@ -16,6 +16,11 @@ async function getMergedContent(): Promise<SiteContent> {
       return {
         ...defaultContent,
         ...data,
+        theme: {
+          ...((defaultContent as any).theme || {}),
+          ...(data.theme || {}),
+        },
+        gallery: Array.isArray(data.gallery) ? data.gallery : [],
         hero: {
           ...defaultContent.hero,
           ...(data.hero || {}),
@@ -42,35 +47,47 @@ async function getMergedContent(): Promise<SiteContent> {
           ...defaultContent.pricing,
           ...(data.pricing || {}),
         },
-        adminWhatsApp: data.adminWhatsApp || defaultContent.adminWhatsApp,
+        adminWhatsApp:
+          data.adminWhatsApp ||
+          data.whatsappNumber ||
+          defaultContent.adminWhatsApp,
       };
     }
   } catch (error) {
     console.warn("Using default site content due to DB query issue:", error);
   }
-  return defaultContent;
+
+  return {
+    ...defaultContent,
+    theme: (defaultContent as any).theme || {},
+    gallery: [],
+  };
 }
 
 export default async function AdminPage() {
-  // ১. কুকি চেক করা হচ্ছে ইউজার লগইন করা কি না (await সহ)
   const cookieStore = await cookies();
   const isLoggedIn = cookieStore.get("admin_logged_in");
 
   if (!isLoggedIn || isLoggedIn.value !== "true") {
-    redirect("/admin/login"); // লগইন না থাকলে লগইন পেজে পাঠিয়ে দেবে
+    redirect("/admin/login");
   }
 
-  // ২. একসাথে সব ডেটা ফেচ করা হচ্ছে
-  const [orders, whatsappNumber, mergedContent] = await Promise.all([
+  const [orders, fetchedWhatsapp, mergedContent] = await Promise.all([
     getAllOrders(),
     getWhatsappNumber(),
     getMergedContent(),
   ]);
 
+  const finalWhatsapp =
+    fetchedWhatsapp ||
+    mergedContent.whatsappNumber ||
+    mergedContent.adminWhatsApp ||
+    "";
+
   return (
     <AdminDashboard
       initialOrders={orders}
-      initialWhatsapp={whatsappNumber}
+      initialWhatsapp={finalWhatsapp}
       defaultValues={mergedContent}
     />
   );
