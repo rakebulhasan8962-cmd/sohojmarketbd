@@ -1,20 +1,39 @@
 "use server";
 
-import { updateSiteContent } from "@/lib/data";
+import { updateSiteContent as saveToDb } from "@/lib/data";
 import { revalidatePath } from "next/cache";
 
-// কনটেন্ট আপডেট করার সার্ভার অ্যাকশন
 export async function updateContentAction(newContent: any) {
   try {
-    const contentToSave = typeof newContent === "string" ? JSON.parse(newContent) : newContent;
-    
-    await updateSiteContent(contentToSave);
+    const contentToSave =
+      typeof newContent === "string" ? JSON.parse(newContent) : newContent;
 
-    revalidatePath("/");
-    revalidatePath("/admin");
+    if (!contentToSave || typeof contentToSave !== "object") {
+      return {
+        success: false,
+        error: "অবৈধ কনটেন্ট ডেটা পাঠানো হয়েছে।",
+      };
+    }
+
+    await saveToDb(contentToSave);
+
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
+
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to update content:", error);
-    return { success: false, error: "ডাটাবেজে কনটেন্ট সেভ করতে সমস্যা হয়েছে।" };
+    return {
+      success: false,
+      error: error?.message || "ডাটাবেজে কনটেন্ট সেভ করতে সমস্যা হয়েছে।",
+    };
   }
+}
+
+export async function saveSiteContent(newContent: any) {
+  return updateContentAction(newContent);
+}
+
+export async function updateSiteContent(newContent: any) {
+  return updateContentAction(newContent);
 }

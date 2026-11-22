@@ -1,9 +1,67 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { confirmOrderStatus } from "@/app/actions";
+import * as orderActions from "@/app/actions";
 
-type FilterStatus = "all" | "pending" | "confirmed";
+export type OrderStatusType =
+  | "pending"
+  | "confirmed"
+  | "processing"
+  | "shipped"
+  | "delivered"
+  | "cancelled";
+
+type FilterStatus = "all" | OrderStatusType;
+
+const ORDER_STATUS_OPTIONS: {
+  value: OrderStatusType;
+  label: string;
+  badgeClass: string;
+}[] = [
+  {
+    value: "pending",
+    label: "Pending",
+    badgeClass: "bg-amber-100 text-amber-800 border border-amber-200",
+  },
+  {
+    value: "confirmed",
+    label: "Confirmed",
+    badgeClass: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+  },
+  {
+    value: "processing",
+    label: "Processing",
+    badgeClass: "bg-sky-100 text-sky-800 border border-sky-200",
+  },
+  {
+    value: "shipped",
+    label: "Shipped",
+    badgeClass: "bg-indigo-100 text-indigo-800 border border-indigo-200",
+  },
+  {
+    value: "delivered",
+    label: "Delivered",
+    badgeClass: "bg-teal-100 text-teal-800 border border-teal-200",
+  },
+  {
+    value: "cancelled",
+    label: "Cancelled",
+    badgeClass: "bg-rose-100 text-rose-800 border border-rose-200",
+  },
+];
+
+function normalizeStatus(raw: any): OrderStatusType {
+  const val = String(raw || "pending").toLowerCase().trim();
+  const valid = ORDER_STATUS_OPTIONS.find((s) => s.value === val);
+  return valid ? valid.value : "pending";
+}
+
+function getStatusMeta(status: OrderStatusType) {
+  return (
+    ORDER_STATUS_OPTIONS.find((s) => s.value === status) ||
+    ORDER_STATUS_OPTIONS[0]
+  );
+}
 
 export default function OrderListAdmin({
   initialOrders = [],
@@ -24,6 +82,7 @@ export default function OrderListAdmin({
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setOrders(sourceList);
@@ -31,20 +90,43 @@ export default function OrderListAdmin({
 
   const safeOrders = Array.isArray(orders) ? orders : [];
 
-  async function handleConfirm(id: number | string) {
+  function showNotice(msg: string) {
+    setStatusNotice(msg);
+    setTimeout(() => setStatusNotice(null), 2200);
+  }
+
+  async function handleStatusChange(
+    id: number | string,
+    nextStatus: OrderStatusType
+  ) {
     setLoadingId(id);
     try {
-      await confirmOrderStatus(id as number);
+      const anyActions = orderActions as any;
+      if (typeof anyActions.updateOrderStatus === "function") {
+        await anyActions.updateOrderStatus(id, nextStatus);
+      } else if (
+        nextStatus === "confirmed" &&
+        typeof anyActions.confirmOrderStatus === "function"
+      ) {
+        await anyActions.confirmOrderStatus(id as number);
+      }
+
       setOrders((prev) =>
         (Array.isArray(prev) ? prev : []).map((order) =>
-          order?.id === id ? { ...order, status: "confirmed" } : order
+          order?.id === id ? { ...order, status: nextStatus } : order
         )
       );
+
       if (selectedOrder?.id === id) {
         setSelectedOrder((prev: any) =>
-          prev ? { ...prev, status: "confirmed" } : null
+          prev ? { ...prev, status: nextStatus } : null
         );
       }
+
+      showNotice(`Order #${id} স্ট্যাটাস "${getStatusMeta(nextStatus).label}" করা হয়েছে`);
+    } catch (err) {
+      console.error("Failed to update order status:", err);
+      showNotice("স্ট্যাটাস আপডেট করতে সমস্যা হয়েছে");
     } finally {
       setLoadingId(null);
     }
@@ -64,27 +146,53 @@ export default function OrderListAdmin({
       : rawPhone.startsWith("0")
       ? `88${rawPhone}`
       : `880${rawPhone}`;
+    const st = getStatusMeta(normalizeStatus(order?.status)).label;
     const msg = encodeURIComponent(
-      `আসসালামু আলাইকুম ${order?.name || "গ্রাহক"}, Sohoj Market থেকে আপনার অর্ডার #${order?.id || ""} (${order?.total || 0}৳) সম্পর্কে যোগাযোগ করছি।`
+      `আসসালামু আলাইকুম ${order?.name || "গ্রাহক"}, Sohoj Market থেকে আপনার অর্ডার #${order?.id || ""} (${order?.total || 0}৳, স্ট্যাটাস: ${st}) সম্পর্কে যোগাযোগ করছি।`
     );
     return `https://wa.me/${normalized}?text=${msg}`;
   }
 
   const stats = useMemo(() => {
     const totalCount = safeOrders.length;
-    const pendingCount = safeOrders.filter((o) => o?.status !== "confirmed").length;
-    const confirmedCount = safeOrders.filter((o) => o?.status === "confirmed").length;
-    const totalRevenue = safeOrders.reduce(
-      (sum, o) => sum + (Number(o?.total) || 0),
-      0
-    );
-    return { totalCount, pendingCount, confirmedCount, totalRevenue };
+    const pendingCount = safeOrders.filter(
+      (o) => normalizeStatus(o?.status) === "pending"
+    ).length;
+    const confirmedCount = safeOrders.filter(
+      (o) => normalizeStatus(o?.status) === "confirmed"
+    ).length;
+    const processingCount = safeOrders.filter(
+      (o) => normalizeStatus(o?.status) === "processing"
+    ).length;
+    const shippedCount = safeOrders.filter(
+      (o) => normalizeStatus(o?.status) === "shipped"
+    ).length;
+    const deliveredCount = safeOrders.filter(
+      (o) => normalizeStatus(o?.status) === "delivered"
+    ).length;
+    const cancelledCount = safeOrders.filter(
+      (o) => normalizeStatus(o?.status) === "cancelled"
+    ).length;
+    const totalRevenue = safeOrders
+      .filter((o) => normalizeStatus(o?.status) !== "cancelled")
+      .reduce((sum, o) => sum + (Number(o?.total) || 0), 0);
+
+    return {
+      totalCount,
+      pendingCount,
+      confirmedCount,
+      processingCount,
+      shippedCount,
+      deliveredCount,
+      cancelledCount,
+      totalRevenue,
+    };
   }, [safeOrders]);
 
   const filteredOrders = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return safeOrders.filter((order) => {
-      const status = order?.status === "confirmed" ? "confirmed" : "pending";
+      const status = normalizeStatus(order?.status);
       if (statusFilter !== "all" && status !== statusFilter) return false;
       if (!q) return true;
 
@@ -98,6 +206,12 @@ export default function OrderListAdmin({
 
   return (
     <div className="bg-white rounded-xl shadow p-5 md:p-7 mb-10 border border-gray-200 space-y-6">
+      {statusNotice && (
+        <div className="bg-slate-900 text-emerald-300 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-700">
+          {statusNotice}
+        </div>
+      )}
+
       {/* হেডার ও সামারি কার্ড */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -105,7 +219,7 @@ export default function OrderListAdmin({
             Customer Orders ({safeOrders.length})
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            অর্ডার সার্চ, ফিল্টার, কনফার্ম ও কাস্টমারের সাথে দ্রুত যোগাযোগ করুন
+            Pending ছাড়াও Confirmed, Processing, Shipped, Delivered ও Cancelled স্ট্যাটাসে অর্ডার পরিচালনা করুন
           </p>
         </div>
 
@@ -123,9 +237,9 @@ export default function OrderListAdmin({
             </div>
           </div>
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-            <div className="text-emerald-700">Confirmed</div>
+            <div className="text-emerald-700">Confirmed / Active</div>
             <div className="text-base font-extrabold text-emerald-900">
-              {stats.confirmedCount}
+              {stats.confirmedCount + stats.processingCount + stats.shippedCount}
             </div>
           </div>
           <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
@@ -138,36 +252,52 @@ export default function OrderListAdmin({
       </div>
 
       {/* সার্চ ও স্ট্যাটাস ফিল্টার বার */}
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-200">
+      <div className="flex flex-col gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="নাম, ফোন নম্বর, Order ID বা ঠিকানা দিয়ে খুঁজুন..."
-          className="flex-1 bg-white border border-gray-300 rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+          placeholder="নাম, ফোন নম্বর, Order ID বা ঠিকানা দিয়ে খুঁজুন..."
+          className="w-full bg-white border border-gray-300 rounded-lg px-3.5 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
 
-        <div className="flex items-center gap-1.5">
-          {(
-            [
-              { key: "all", label: `All (${stats.totalCount})` },
-              { key: "pending", label: `Pending (${stats.pendingCount})` },
-              { key: "confirmed", label: `Confirmed (${stats.confirmedCount})` },
-            ] as { key: FilterStatus; label: string }[]
-          ).map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setStatusFilter(tab.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                statusFilter === tab.key
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              statusFilter === "all"
+                ? "bg-slate-900 text-white"
+                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+            }`}
+          >
+            All ({stats.totalCount})
+          </button>
+
+          {ORDER_STATUS_OPTIONS.map((st) => {
+            const countMap: Record<OrderStatusType, number> = {
+              pending: stats.pendingCount,
+              confirmed: stats.confirmedCount,
+              processing: stats.processingCount,
+              shipped: stats.shippedCount,
+              delivered: stats.deliveredCount,
+              cancelled: stats.cancelledCount,
+            };
+            return (
+              <button
+                key={st.value}
+                type="button"
+                onClick={() => setStatusFilter(st.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  statusFilter === st.value
+                    ? "bg-slate-900 text-white"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+                }`}
+              >
+                {st.label} ({countMap[st.value]})
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -176,7 +306,7 @@ export default function OrderListAdmin({
         <p className="text-gray-500 text-center py-8">
           {safeOrders.length === 0
             ? "এখনো কোনো অর্ডার আসেনি।"
-            : "সার্চ বা ফিল্টারের সাথে মিলে এমন কোনো অর্ডার পাওয়া যায়নি।"}
+            : "সার্চ বা ফিল্টারের সাথে মিলে এমন কোনো অর্ডার পাওয়া যায়নি।"}
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -188,14 +318,15 @@ export default function OrderListAdmin({
                 <th className="p-3">Shipping</th>
                 <th className="p-3">Total</th>
                 <th className="p-3">Status</th>
-                <th className="p-3 text-right">Action</th>
+                <th className="p-3 text-right">Action / Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 text-sm">
               {filteredOrders.map((order, index) => {
                 const orderId = order?.id ?? index + 1;
-                const isConfirmed = order?.status === "confirmed";
-                const copyText = `Order #${orderId}\nName: ${order?.name || "-"}\nPhone: ${order?.phone || "-"}\nAddress: ${order?.address || "-"}\nTotal: ${order?.total ?? 0}৳`;
+                const currentStatus = normalizeStatus(order?.status);
+                const statusMeta = getStatusMeta(currentStatus);
+                const copyText = `Order #${orderId}\nName: ${order?.name || "-"}\nPhone: ${order?.phone || "-"}\nAddress: ${order?.address || "-"}\nStatus: ${statusMeta.label}\nTotal: ${order?.total ?? 0}৳`;
 
                 return (
                   <tr key={orderId} className="hover:bg-gray-50 align-top">
@@ -231,7 +362,7 @@ export default function OrderListAdmin({
                       </div>
                     </td>
 
-                    <td className="p-3 whitespace-nowrap">
+                    <td className="p-3 whitespace-nowrap text-gray-800">
                       {order?.shippingArea === "inside"
                         ? "ঢাকার ভিতরে"
                         : "ঢাকার বাহিরে"}{" "}
@@ -242,16 +373,34 @@ export default function OrderListAdmin({
                       {order?.total ?? 0}৳
                     </td>
 
-                    <td className="p-3 whitespace-nowrap">
-                      {isConfirmed ? (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">
-                          ✓ Confirmed
+                    <td className="p-3 whitespace-nowrap space-y-1.5">
+                      <div>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${statusMeta.badgeClass}`}
+                        >
+                          {statusMeta.label}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800">
-                          ⏳ Pending
-                        </span>
-                      )}
+                      </div>
+                      <div>
+                        <select
+                          aria-label={`Order ${orderId} status`}
+                          value={currentStatus}
+                          disabled={loadingId === orderId}
+                          onChange={(e) =>
+                            handleStatusChange(
+                              orderId,
+                              e.target.value as OrderStatusType
+                            )
+                          }
+                          className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 cursor-pointer disabled:opacity-50"
+                        >
+                          {ORDER_STATUS_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
 
                     <td className="p-3 text-right whitespace-nowrap">
@@ -283,21 +432,17 @@ export default function OrderListAdmin({
                           </a>
                         )}
 
-                        {!isConfirmed ? (
+                        {currentStatus === "pending" && (
                           <button
                             type="button"
-                            onClick={() => handleConfirm(orderId)}
+                            onClick={() =>
+                              handleStatusChange(orderId, "confirmed")
+                            }
                             disabled={loadingId === orderId}
-                            className="bg-green-600 hover:bg-green-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
+                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
                           >
-                            {loadingId === orderId
-                              ? "Confirming..."
-                              : "Confirm Order"}
+                            {loadingId === orderId ? "Saving..." : "Confirm"}
                           </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs font-medium px-2">
-                            Completed
-                          </span>
                         )}
                       </div>
                     </td>
@@ -364,9 +509,25 @@ export default function OrderListAdmin({
                   {selectedOrder?.total ?? 0}৳
                 </span>
               </div>
-              <div>
-                <span className="font-bold text-gray-900">স্ট্যাটাস:</span>{" "}
-                {selectedOrder?.status === "confirmed" ? "Confirmed" : "Pending"}
+              <div className="flex items-center gap-2 pt-1">
+                <span className="font-bold text-gray-900">স্ট্যাটাস বদলান:</span>
+                <select
+                  value={normalizeStatus(selectedOrder?.status)}
+                  disabled={loadingId === selectedOrder?.id}
+                  onChange={(e) =>
+                    handleStatusChange(
+                      selectedOrder?.id,
+                      e.target.value as OrderStatusType
+                    )
+                  }
+                  className="bg-gray-50 border border-gray-300 rounded-lg px-2.5 py-1 text-xs font-bold text-gray-900 cursor-pointer"
+                >
+                  {ORDER_STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -387,18 +548,6 @@ export default function OrderListAdmin({
                 >
                   WhatsApp Message
                 </a>
-              )}
-              {selectedOrder?.status !== "confirmed" && (
-                <button
-                  type="button"
-                  onClick={() => handleConfirm(selectedOrder?.id)}
-                  disabled={loadingId === selectedOrder?.id}
-                  className="px-4 py-2 rounded-lg text-xs font-bold bg-green-600 hover:bg-green-700 text-white cursor-pointer disabled:opacity-50"
-                >
-                  {loadingId === selectedOrder?.id
-                    ? "Confirming..."
-                    : "Confirm Order"}
-                </button>
               )}
             </div>
           </div>

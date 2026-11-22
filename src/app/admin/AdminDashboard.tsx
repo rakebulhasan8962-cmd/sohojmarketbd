@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import * as actions from "../actions";
 import OrderListAdmin from "../../components/OrderListAdmin";
 import LandingView, {
@@ -14,7 +15,13 @@ interface GalleryPhoto {
   caption?: string;
 }
 
-const DEFAULT_PHOTO = "/images/khejur-gur-hero.avif";
+const DEFAULT_PHOTO =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500"><rect width="800" height="500" fill="#1e293b"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="24">Upload Image</text></svg>`
+  );
+const DEFAULT_WHATSAPP = "01639193531";
+const LOCAL_BACKUP_KEY = "sohoj_admin_dashboard_backup_v1";
 
 const FONT_CHOICES = [
   { label: "Default System", value: "inherit" },
@@ -130,6 +137,13 @@ const SELECTABLE_TARGETS: SelectedElement[] = [
     styleKey: "featureCard_3",
   },
   {
+    id: "gallery-heading",
+    label: "গ্যালারির ওপরের শিরোনাম",
+    type: "text",
+    contentPath: "galleryTitle",
+    styleKey: "galleryTitle",
+  },
+  {
     id: "details-box-l",
     label: "Details বাম বক্স",
     type: "box",
@@ -152,14 +166,14 @@ const SELECTABLE_TARGETS: SelectedElement[] = [
     label: "প্যাক বক্স #1",
     type: "box",
     contentPath: "packages.0.name",
-    styleKey: "packageBox",
+    styleKey: "packageBox_0",
   },
   {
     id: "pkg-box-1",
     label: "প্যাক বক্স #2",
     type: "box",
     contentPath: "packages.1.name",
-    styleKey: "packageBox",
+    styleKey: "packageBox_1",
   },
   {
     id: "faq-box",
@@ -169,6 +183,163 @@ const SELECTABLE_TARGETS: SelectedElement[] = [
   },
 ];
 
+function buildInitialFormData(defaultValues: any, initialWhatsapp: string) {
+  let localBackup: any = null;
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_BACKUP_KEY);
+      if (raw) {
+        localBackup = JSON.parse(raw);
+      }
+    } catch {
+      localBackup = null;
+    }
+  }
+
+  const hasServerDefaults =
+    defaultValues &&
+    typeof defaultValues === "object" &&
+    Object.keys(defaultValues).length > 0;
+  const base = hasServerDefaults ? defaultValues : localBackup || {};
+
+  const resolvedPhone =
+    (typeof initialWhatsapp === "string" && initialWhatsapp.trim()) ||
+    base?.whatsappNumber ||
+    base?.adminWhatsApp ||
+    DEFAULT_WHATSAPP;
+
+  return {
+    ...base,
+    siteName: base?.siteName || "Sohoj Market",
+    galleryTitle: base?.galleryTitle || "আমাদের পণ্যের গ্যালারি",
+    whatsappNumber: resolvedPhone,
+    adminWhatsApp: resolvedPhone,
+    gallery:
+      Array.isArray(base?.gallery) && base.gallery.length > 0
+        ? base.gallery
+        : [
+            {
+              url: DEFAULT_PHOTO,
+              caption: "খাঁটি খেজুরের গুড় — প্রাকৃতিক স্বাদ #1",
+            },
+            { url: DEFAULT_PHOTO, caption: "হাতে তৈরি ঐতিহ্যবাহী পাটালি #2" },
+            { url: DEFAULT_PHOTO, caption: "শীতের সকালের ঘ্রাণ ও শুদ্ধতা #3" },
+          ],
+    customBlocks: Array.isArray(base?.customBlocks) ? base.customBlocks : [],
+    courierDispatches: Array.isArray(base?.courierDispatches)
+      ? base.courierDispatches
+      : [],
+    features: Array.isArray(base?.features) ? base.features : [],
+    packages: Array.isArray(base?.packages) ? base.packages : [],
+    faqs: Array.isArray(base?.faqs) ? base.faqs : [],
+    details: {
+      ...(base?.details || {}),
+      points: Array.isArray(base?.details?.points) ? base.details.points : [],
+    },
+    whyUs: {
+      ...(base?.whyUs || {}),
+      points: Array.isArray(base?.whyUs?.points) ? base.whyUs.points : [],
+    },
+    targetAudience: {
+      ...(base?.targetAudience || {}),
+      points: Array.isArray(base?.targetAudience?.points)
+        ? base.targetAudience.points
+        : [],
+    },
+    pricing: {
+      productName: base?.pricing?.productName || "খাঁটি খেজুরের গুড়",
+      productPrice: base?.pricing?.productPrice ?? 1250,
+      shippingInside: base?.pricing?.shippingInside ?? 60,
+      shippingOutside: base?.pricing?.shippingOutside ?? 120,
+      discountEnabled: base?.pricing?.discountEnabled ?? false,
+      discountType: base?.pricing?.discountType || "flat",
+      discountValue: base?.pricing?.discountValue ?? 0,
+      discountLabel: base?.pricing?.discountLabel || "বিশেষ ছাড়",
+      paymentMethods:
+        Array.isArray(base?.pricing?.paymentMethods) &&
+        base.pricing.paymentMethods.length > 0
+          ? base.pricing.paymentMethods
+          : [
+              "Pay with cash upon delivery",
+              "bKash",
+              "Nagad",
+              "Card Payment",
+            ],
+      ...(base?.pricing || {}),
+    },
+    theme: {
+      heroTitleSize: base?.theme?.heroTitleSize ?? 48,
+      heroDescSize: base?.theme?.heroDescSize ?? 17,
+      sectionTitleSize: base?.theme?.sectionTitleSize ?? 28,
+      heroImageHeight: base?.theme?.heroImageHeight ?? 360,
+      imageShadow:
+        base?.theme?.imageShadow ??
+        "0 20px 30px -8px rgba(115, 56, 94, 0.22)",
+      boxShadow:
+        base?.theme?.boxShadow ??
+        "0 12px 26px -8px rgba(30, 27, 36, 0.12)",
+      borderRadius: base?.theme?.borderRadius ?? 16,
+      sectionPaddingY: base?.theme?.sectionPaddingY ?? 48,
+      boxPadding: base?.theme?.boxPadding ?? 24,
+      pageBgColor: base?.theme?.pageBgColor || "#FAF9F5",
+      primaryColor: base?.theme?.primaryColor || "#73385E",
+      accentColor: base?.theme?.accentColor || "#A2AB34",
+      boxBgColor: base?.theme?.boxBgColor || "#FFFFFF",
+      textColor: base?.theme?.textColor || "#1E1B24",
+      mutedTextColor: base?.theme?.mutedTextColor || "#4B4554",
+      ...(base?.theme || {}),
+      elements: {
+        galleryCard: { size: 180, borderRadius: 14 },
+        ...((base?.theme && base.theme.elements) || {}),
+      },
+    },
+  };
+}
+
+async function compressImageToSafeDataUrl(
+  file: File,
+  maxSide = 900,
+  quality = 0.72
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === "string" ? reader.result : "";
+      if (!src) {
+        resolve(DEFAULT_PHOTO);
+        return;
+      }
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSide || height > maxSide) {
+          if (width >= height) {
+            height = Math.round((height * maxSide) / width);
+            width = maxSide;
+          } else {
+            width = Math.round((width * maxSide) / height);
+            height = maxSide;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function AdminDashboard({
   initialOrders = [],
   initialWhatsapp = "",
@@ -176,12 +347,13 @@ export default function AdminDashboard({
 }: {
   initialOrders?: any[];
   initialWhatsapp?: string;
-  defaultValues: any;
+  defaultValues?: any;
 }) {
+  const router = useRouter();
   const safeOrders = Array.isArray(initialOrders) ? initialOrders : [];
 
   const [activeNav, setActiveNav] = useState<
-    "orders" | "graph" | "gallery" | "json" | "editor" | "preview"
+    "orders" | "courier" | "graph" | "gallery" | "json" | "editor" | "preview"
   >("orders");
 
   const [isFullScreenWebView, setIsFullScreenWebView] = useState(false);
@@ -193,103 +365,32 @@ export default function AdminDashboard({
     SELECTABLE_TARGETS[0]
   );
 
+  const [selectedCourierProvider, setSelectedCourierProvider] = useState<
+    "Steadfast" | "Pathao" | "RedX"
+  >("Steadfast");
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(
+    safeOrders[0]?.id ? String(safeOrders[0].id) : ""
+  );
+  const [courierNote, setCourierNote] = useState<string>(
+    "সাবধানে ডেলিভারি করবেন (ভঙ্গুর/খাদ্যপণ্য)"
+  );
+
   const galleryFileInputRef = useRef<HTMLInputElement | null>(null);
   const editorFileInputRef = useRef<HTMLInputElement | null>(null);
   const [editorImagePath, setEditorImagePath] = useState<string>("hero.imageUrl");
 
-  const [formData, setFormData] = useState<any>(() => ({
-    ...defaultValues,
-    siteName: defaultValues?.siteName || "Sohoj Market",
-    whatsappNumber:
-      initialWhatsapp ||
-      defaultValues?.whatsappNumber ||
-      defaultValues?.adminWhatsApp ||
-      "",
-    adminWhatsApp:
-      initialWhatsapp ||
-      defaultValues?.adminWhatsApp ||
-      defaultValues?.whatsappNumber ||
-      "",
-    gallery:
-      Array.isArray(defaultValues?.gallery) && defaultValues.gallery.length > 0
-        ? defaultValues.gallery
-        : [
-            {
-              url: DEFAULT_PHOTO,
-              caption: "খাঁটি খেজুরের গুড় — প্রাকৃতিক স্বাদ #1",
-            },
-            { url: DEFAULT_PHOTO, caption: "হাতে তৈরি ঐতিহ্যবাহী পাটালি #2" },
-            { url: DEFAULT_PHOTO, caption: "শীতের সকালের ঘ্রাণ ও শুদ্ধতা #3" },
-          ],
-    customBlocks: Array.isArray(defaultValues?.customBlocks)
-      ? defaultValues.customBlocks
-      : [],
-    features: Array.isArray(defaultValues?.features)
-      ? defaultValues.features
-      : [],
-    packages: Array.isArray(defaultValues?.packages)
-      ? defaultValues.packages
-      : [],
-    faqs: Array.isArray(defaultValues?.faqs) ? defaultValues.faqs : [],
-    details: {
-      ...(defaultValues?.details || {}),
-      points: Array.isArray(defaultValues?.details?.points)
-        ? defaultValues.details.points
-        : [],
-    },
-    whyUs: {
-      ...(defaultValues?.whyUs || {}),
-      points: Array.isArray(defaultValues?.whyUs?.points)
-        ? defaultValues.whyUs.points
-        : [],
-    },
-    targetAudience: {
-      ...(defaultValues?.targetAudience || {}),
-      points: Array.isArray(defaultValues?.targetAudience?.points)
-        ? defaultValues.targetAudience.points
-        : [],
-    },
-    pricing: {
-      productName: defaultValues?.pricing?.productName || "খাঁটি খেজুরের গুড়",
-      productPrice: defaultValues?.pricing?.productPrice ?? 1250,
-      shippingInside: defaultValues?.pricing?.shippingInside ?? 60,
-      shippingOutside: defaultValues?.pricing?.shippingOutside ?? 120,
-      ...(defaultValues?.pricing || {}),
-    },
-    theme: {
-      heroTitleSize: defaultValues?.theme?.heroTitleSize ?? 48,
-      heroDescSize: defaultValues?.theme?.heroDescSize ?? 17,
-      sectionTitleSize: defaultValues?.theme?.sectionTitleSize ?? 28,
-      heroImageHeight: defaultValues?.theme?.heroImageHeight ?? 360,
-      imageShadow:
-        defaultValues?.theme?.imageShadow ??
-        "0 20px 30px -8px rgba(115, 56, 94, 0.22)",
-      boxShadow:
-        defaultValues?.theme?.boxShadow ??
-        "0 12px 26px -8px rgba(30, 27, 36, 0.12)",
-      borderRadius: defaultValues?.theme?.borderRadius ?? 16,
-      sectionPaddingY: defaultValues?.theme?.sectionPaddingY ?? 48,
-      boxPadding: defaultValues?.theme?.boxPadding ?? 24,
-      pageBgColor: defaultValues?.theme?.pageBgColor || "#FAF9F5",
-      primaryColor: defaultValues?.theme?.primaryColor || "#73385E",
-      accentColor: defaultValues?.theme?.accentColor || "#A2AB34",
-      boxBgColor: defaultValues?.theme?.boxBgColor || "#FFFFFF",
-      textColor: defaultValues?.theme?.textColor || "#1E1B24",
-      mutedTextColor: defaultValues?.theme?.mutedTextColor || "#4B4554",
-      ...(defaultValues?.theme || {}),
-      elements: {
-        galleryCard: { size: 180, borderRadius: 14 },
-        ...((defaultValues?.theme && defaultValues.theme.elements) || {}),
-      },
-    },
-  }));
+  const [formData, setFormData] = useState<any>(() =>
+    buildInitialFormData(defaultValues, initialWhatsapp)
+  );
 
   const [history, setHistory] = useState<any[]>([]);
+  const [redoStack, setRedoStack] = useState<any[]>([]);
 
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(
       {
         siteName: formData.siteName,
+        galleryTitle: formData.galleryTitle,
         hero: formData.hero || {},
         features: formData.features || [],
         details: formData.details || {},
@@ -309,6 +410,7 @@ export default function AdminDashboard({
       JSON.stringify(
         {
           siteName: formData.siteName,
+          galleryTitle: formData.galleryTitle,
           hero: formData.hero || {},
           features: formData.features || [],
           details: formData.details || {},
@@ -329,77 +431,303 @@ export default function AdminDashboard({
     }
   }, [selectedElement]);
 
-  const commitChange = (updater: (prev: any) => any) => {
-    setFormData((prev: any) => {
-      setHistory((h) => [...h.slice(-39), prev]);
-      return updater(prev);
-    });
-  };
-
-  const handleUndo = () => {
-    setHistory((prevHistory) => {
-      if (prevHistory.length === 0) return prevHistory;
-      const previousState = prevHistory[prevHistory.length - 1];
-      setFormData(previousState);
-      setToast("আগের অবস্থায় Undo হয়েছে!");
-      setTimeout(() => setToast(null), 1600);
-      return prevHistory.slice(0, -1);
-    });
-  };
-
   const [newPhotoUrl, setNewPhotoUrl] = useState(DEFAULT_PHOTO);
   const [newPhotoCaption, setNewPhotoCaption] = useState("");
   const [insertAtPosition, setInsertAtPosition] = useState<string>("end");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  const showToast = useCallback((msg: string, duration = 2400) => {
+    setToast(msg);
+    setTimeout(() => {
+      setToast((prev) => (prev === msg ? null : prev));
+    }, duration);
+  }, []);
+
+  const commitChange = useCallback((updater: (prev: any) => any) => {
+    setFormData((prev: any) => {
+      const next = updater(prev);
+      if (next !== prev) {
+        setHistory((h: any[]) => [...h.slice(-39), prev]);
+        setRedoStack([]);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    setHistory((prevHistory: any[]) => {
+      if (prevHistory.length === 0) return prevHistory;
+      const previousState = prevHistory[prevHistory.length - 1];
+      setFormData((current: any) => {
+        setRedoStack((r: any[]) => [...r.slice(-39), current]);
+        return previousState;
+      });
+      showToast("আগের অবস্থায় Undo হয়েছে!", 1600);
+      return prevHistory.slice(0, -1);
+    });
+  }, [showToast]);
+
+  const handleRedo = useCallback(() => {
+    setRedoStack((prevRedo: any[]) => {
+      if (prevRedo.length === 0) return prevRedo;
+      const nextState = prevRedo[prevRedo.length - 1];
+      setFormData((current: any) => {
+        setHistory((h: any[]) => [...h.slice(-39), current]);
+        return nextState;
+      });
+      showToast("Redo হয়েছে!", 1600);
+      return prevRedo.slice(0, -1);
+    });
+  }, [showToast]);
+
+  const latestFormDataRef = useRef(formData);
+  useEffect(() => {
+    latestFormDataRef.current = formData;
+  }, [formData]);
+
+  const handleSaveAll = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+
+    const currentData = latestFormDataRef.current;
+    const phone = (
+      currentData?.whatsappNumber ||
+      currentData?.adminWhatsApp ||
+      DEFAULT_WHATSAPP
+    ).trim();
+
+    const payload = {
+      ...currentData,
+      whatsappNumber: phone,
+      adminWhatsApp: phone,
+    };
+
+    try {
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(payload));
+        } catch {
+          // ignore localStorage quota error
+        }
+      }
+
+      const mod = actions as Record<string, any>;
+      const candidateNames = [
+        "updateContentAction",
+        "saveSiteContent",
+        "updateSiteContent",
+        "saveContentAction",
+        "saveContent",
+        "updateContent",
+        "saveLandingContent",
+        "updateLandingContent",
+      ];
+
+      let saveFn: ((data: any) => Promise<any>) | null = null;
+      for (const name of candidateNames) {
+        if (mod && typeof mod[name] === "function") {
+          saveFn = mod[name];
+          break;
+        }
+      }
+
+      if (!saveFn && mod && typeof mod === "object") {
+        for (const [k, v] of Object.entries(mod)) {
+          if (typeof v === "function" && !/whatsapp|order/i.test(k)) {
+            saveFn = v;
+            break;
+          }
+        }
+      }
+
+      let savedOnServer = false;
+      let serverError = "";
+
+      if (typeof saveFn === "function") {
+        const res = await saveFn(payload);
+        if (res && typeof res === "object" && res.success === false) {
+          serverError =
+            res.error || res.message || "ডাটাবেজে সেভ করতে সমস্যা হয়েছে!";
+        } else {
+          savedOnServer = true;
+        }
+      }
+
+      if (!savedOnServer) {
+        try {
+          const apiRes = await fetch("/api/content", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (apiRes.ok) {
+            const apiData = await apiRes.json().catch(() => ({}));
+            if (apiData?.success !== false) {
+              savedOnServer = true;
+              serverError = "";
+            }
+          }
+        } catch {
+          // ignore if /api/content is not present
+        }
+      }
+
+      router.refresh();
+
+      if (savedOnServer) {
+        const okMsg = "সব পরিবর্তন সফলভাবে সেভ হয়েছে!";
+        showToast(okMsg, 2200);
+        if (typeof window !== "undefined") window.alert(okMsg);
+      } else {
+        const msg = serverError
+          ? `${serverError} (লোকাল ব্রাউজারে সেভ রাখা হয়েছে)`
+          : "লোকাল ব্রাউজারে সেভ হয়েছে। সার্ভার সেভের জন্য actions.ts বা /api/content চেক করুন।";
+        showToast(msg, 3000);
+        if (typeof window !== "undefined") window.alert(msg);
+      }
+    } catch (e: any) {
+      const failMsg = `সেভ করতে সমস্যা হয়েছে: ${e?.message || "Server error"}`;
+      showToast(failMsg, 3200);
+      if (typeof window !== "undefined") window.alert(failMsg);
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, showToast, router]);
+
+  const handleSaveAllRef = useRef(handleSaveAll);
+  useEffect(() => {
+    handleSaveAllRef.current = handleSaveAll;
+  }, [handleSaveAll]);
+
+  const handleUndoRef = useRef(handleUndo);
+  useEffect(() => {
+    handleUndoRef.current = handleUndo;
+  }, [handleUndo]);
+
+  const handleRedoRef = useRef(handleRedo);
+  useEffect(() => {
+    handleRedoRef.current = handleRedo;
+  }, [handleRedo]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.ctrlKey || e.metaKey;
+      if (!isMod) return;
+
+      const key = e.key.toLowerCase();
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
+      if (key === "s") {
+        e.preventDefault();
+        void handleSaveAllRef.current();
+      } else if (key === "z" && !e.shiftKey) {
+        if (!isEditable && history.length > 0) {
+          e.preventDefault();
+          handleUndoRef.current();
+        }
+      } else if ((key === "y" && !e.shiftKey) || (key === "z" && e.shiftKey)) {
+        if (!isEditable && redoStack.length > 0) {
+          e.preventDefault();
+          handleRedoRef.current();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [history.length, redoStack.length]);
+
   const galleryList: GalleryPhoto[] = Array.isArray(formData.gallery)
     ? formData.gallery
     : [];
 
-  const readFileAsDataUrl = (
-    file: File,
-    onDone: (dataUrl: string) => void
-  ) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        onDone(reader.result);
-      }
+  const courierDispatches: any[] = Array.isArray(formData.courierDispatches)
+    ? formData.courierDispatches
+    : [];
+
+  const handleSendToCourier = () => {
+    const targetOrder =
+      safeOrders.find((o) => String(o?.id) === String(selectedOrderId)) ||
+      safeOrders[0];
+
+    const trackingCode = `${selectedCourierProvider.slice(
+      0,
+      2
+    ).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const entry = {
+      id: `cour_${Date.now()}`,
+      orderId: targetOrder?.id || "MANUAL",
+      customerName: targetOrder?.customerName || targetOrder?.name || "গ্রাহক",
+      phone: targetOrder?.phone || DEFAULT_WHATSAPP,
+      address: targetOrder?.address || "ঠিকানা নির্ধারিত নয়",
+      total: targetOrder?.total ?? 0,
+      courier: selectedCourierProvider,
+      trackingCode,
+      note: courierNote,
+      status: "Booked / Ready to Dispatch",
+      createdAt: new Date().toLocaleString("bn-BD"),
     };
-    reader.readAsDataURL(file);
+
+    commitChange((prev) => ({
+      ...prev,
+      courierDispatches: [entry, ...(prev.courierDispatches || [])],
+    }));
+    showToast(`${selectedCourierProvider}-এ পাঠানোর জন্য বুক করা হয়েছে!`, 2400);
   };
 
-  const handleGalleryFileChange = (
+  const handleUpdateCourierStatus = (id: string, status: string) => {
+    commitChange((prev) => ({
+      ...prev,
+      courierDispatches: (prev.courierDispatches || []).map((c: any) =>
+        c.id === id ? { ...c, status } : c
+      ),
+    }));
+  };
+
+  const handleGalleryFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    readFileAsDataUrl(file, (dataUrl) => {
+    try {
+      const dataUrl = await compressImageToSafeDataUrl(file);
       setNewPhotoUrl(dataUrl);
       if (!newPhotoCaption.trim()) {
         setNewPhotoCaption(file.name.replace(/\.[^/.]+$/, ""));
       }
-      setToast("গ্যালারির ছবি সিলেক্ট হয়েছে! '+ যোগ' চাপুন");
-      setTimeout(() => setToast(null), 2000);
-    });
-    e.target.value = "";
+      showToast("গ্যালারির ছবি সিলেক্ট হয়েছে! '+ যোগ' চাপুন", 2000);
+    } catch {
+      showToast("ছবি প্রসেস করতে সমস্যা হয়েছে। অন্য ছবি চেষ্টা করুন।", 2500);
+    } finally {
+      e.target.value = "";
+    }
   };
 
-  const handleEditorFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditorFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const targetPath =
-      selectedElement.type === "image" && selectedElement.contentPath
-        ? selectedElement.contentPath
-        : editorImagePath;
+    try {
+      const targetPath =
+        selectedElement.type === "image" && selectedElement.contentPath
+          ? selectedElement.contentPath
+          : editorImagePath;
 
-    readFileAsDataUrl(file, (dataUrl) => {
+      const dataUrl = await compressImageToSafeDataUrl(file);
       handleUpdateContent(targetPath, dataUrl);
-      setToast("ছবি আপলোড ও সেট হয়েছে! Save Changes চাপুন");
-      setTimeout(() => setToast(null), 2200);
-    });
-    e.target.value = "";
+      showToast("ছবি আপলোড ও সেট হয়েছে! Save চাপুন", 2200);
+    } catch {
+      showToast("ছবি আপলোড করতে সমস্যা হয়েছে। অন্য ছবি চেষ্টা করুন।", 2500);
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const chartPoints = useMemo(() => {
@@ -495,22 +823,28 @@ export default function AdminDashboard({
   };
 
   const handleUpdateStyle = (styleKey: string, field: string, value: any) => {
-    commitChange((prev) => ({
-      ...prev,
-      theme: {
-        ...(prev.theme || {}),
-        elements: {
-          ...((prev.theme && prev.theme.elements) || {}),
-          [styleKey]: {
-            ...((prev.theme &&
-              prev.theme.elements &&
-              prev.theme.elements[styleKey]) ||
-              {}),
-            [field]: value,
-          },
+    commitChange((prev) => {
+      const currentElements = {
+        ...((prev.theme && prev.theme.elements) || {}),
+      };
+
+      if (field === "__resetAll") {
+        delete currentElements[styleKey];
+      } else {
+        currentElements[styleKey] = {
+          ...(currentElements[styleKey] || {}),
+          [field]: value,
+        };
+      }
+
+      return {
+        ...prev,
+        theme: {
+          ...(prev.theme || {}),
+          elements: currentElements,
         },
-      },
-    }));
+      };
+    });
   };
 
   const handleResizeElement = (
@@ -546,6 +880,18 @@ export default function AdminDashboard({
     }));
   };
 
+  const handleUpdateCustomBlock = (
+    id: string,
+    patch: Partial<CustomBlockItem>
+  ) => {
+    commitChange((prev) => ({
+      ...prev,
+      customBlocks: (prev.customBlocks || []).map((b: CustomBlockItem) =>
+        b.id === id ? { ...b, ...patch } : b
+      ),
+    }));
+  };
+
   const handleGalleryChange = (nextGallery: GalleryPhoto[]) => {
     const normalized = nextGallery.map((item, idx) => ({
       url: item.url,
@@ -557,13 +903,26 @@ export default function AdminDashboard({
   const handleApplyJson = () => {
     try {
       const parsed = JSON.parse(jsonText);
+      if (!parsed || typeof parsed !== "object") {
+        setJsonError("JSON অবশ্যই একটি অবজেক্ট হতে হবে।");
+        return;
+      }
       commitChange((prev) => ({
         ...prev,
         ...parsed,
+        theme: parsed.theme
+          ? {
+              ...(prev.theme || {}),
+              ...parsed.theme,
+              elements: {
+                ...((prev.theme && prev.theme.elements) || {}),
+                ...(parsed.theme.elements || {}),
+              },
+            }
+          : prev.theme,
       }));
       setJsonError(null);
-      setToast("JSON থেকে লেখা আপডেট হয়েছে!");
-      setTimeout(() => setToast(null), 1800);
+      showToast("JSON থেকে লেখা আপডেট হয়েছে!", 1800);
     } catch (err: any) {
       setJsonError(`Invalid JSON: ${err?.message || "Syntax error"}`);
     }
@@ -595,36 +954,6 @@ export default function AdminDashboard({
     handleGalleryChange(galleryList.filter((_, i) => i !== idx));
   };
 
-  const handleSaveAll = async () => {
-    setSaving(true);
-    try {
-      const payload = {
-        ...formData,
-        whatsappNumber: formData.whatsappNumber || formData.adminWhatsApp || "",
-        adminWhatsApp: formData.adminWhatsApp || formData.whatsappNumber || "",
-      };
-      const anyActions = actions as any;
-      if (typeof anyActions.saveSiteContent === "function") {
-        await anyActions.saveSiteContent(payload);
-      } else if (typeof anyActions.updateSiteContent === "function") {
-        await anyActions.updateSiteContent(payload);
-      }
-      if (
-        typeof anyActions.updateWhatsappNumber === "function" &&
-        payload.whatsappNumber
-      ) {
-        await anyActions.updateWhatsappNumber(payload.whatsappNumber);
-      }
-      setToast("সব পরিবর্তন সেভ হয়েছে!");
-      setTimeout(() => setToast(null), 2200);
-    } catch (e: any) {
-      setToast(e?.message || "সেভ করতে সমস্যা হয়েছে");
-      setTimeout(() => setToast(null), 2600);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (activeNav === "preview" && isFullScreenWebView) {
     return (
       <div className="relative min-h-screen w-full overflow-x-hidden">
@@ -652,6 +981,14 @@ export default function AdminDashboard({
           </button>
           <button
             type="button"
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            className="text-xs font-bold px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 disabled:opacity-35 cursor-pointer"
+          >
+            Redo ({redoStack.length})
+          </button>
+          <button
+            type="button"
             onClick={handleSaveAll}
             disabled={saving}
             className="text-xs font-extrabold px-4 py-1 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer disabled:opacity-60"
@@ -673,9 +1010,14 @@ export default function AdminDashboard({
           onUpdateStyle={handleUpdateStyle}
           onResizeElement={handleResizeElement}
           onAddCustomBlock={handleAddCustomBlock}
+          onUpdateCustomBlock={handleUpdateCustomBlock}
           onGalleryChange={handleGalleryChange}
+          onSave={handleSaveAll}
+          saving={saving}
           onUndo={handleUndo}
+          onRedo={handleRedo}
           canUndo={history.length > 0}
+          canRedo={redoStack.length > 0}
         />
       </div>
     );
@@ -734,6 +1076,7 @@ export default function AdminDashboard({
           <nav className="flex md:flex-col gap-1.5 overflow-x-auto pb-1 md:pb-0">
             {[
               { id: "orders", label: "Orders", icon: "ShoppingBag" },
+              { id: "courier", label: "Courier", icon: "Truck" },
               { id: "graph", label: "Order Graph", icon: "TrendingUp" },
               { id: "gallery", label: "Photo Gallery", icon: "Images" },
               { id: "editor", label: "Box, Button & Style", icon: "Sliders" },
@@ -761,15 +1104,26 @@ export default function AdminDashboard({
         </div>
 
         <div className="p-4 border-t border-slate-800 space-y-2">
-          <button
-            type="button"
-            onClick={handleUndo}
-            disabled={history.length === 0}
-            className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 disabled:opacity-35 flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <DynamicIcon name="Undo2" className="w-3.5 h-3.5" />
-            Undo ({history.length})
-          </button>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={history.length === 0}
+              className="w-full py-2 px-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 disabled:opacity-35 flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <DynamicIcon name="Undo2" className="w-3.5 h-3.5" />
+              Undo ({history.length})
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className="w-full py-2 px-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 disabled:opacity-35 flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <DynamicIcon name="Redo2" className="w-3.5 h-3.5" />
+              Redo ({redoStack.length})
+            </button>
+          </div>
 
           <button
             type="button"
@@ -796,6 +1150,139 @@ export default function AdminDashboard({
               </div>
             </div>
             <OrderListAdmin initialOrders={safeOrders} />
+          </section>
+        )}
+
+        {activeNav === "courier" && (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 space-y-5 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <h1 className="text-xl font-extrabold text-white">
+                  Courier Management
+                </h1>
+                <p className="text-xs text-slate-400">
+                  অর্ডার সিলেক্ট করে সরাসরি কুরিয়ারে পাঠানোর বুকিং ও ট্র্যাকিং
+                  ম্যানেজ করুন
+                </p>
+              </div>
+
+              <div className="inline-flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                {(["Steadfast", "Pathao", "RedX"] as const).map((prov) => (
+                  <button
+                    key={prov}
+                    type="button"
+                    onClick={() => setSelectedCourierProvider(prov)}
+                    className={`px-3.5 py-1.5 rounded-lg font-bold cursor-pointer ${
+                      selectedCourierProvider === prov
+                        ? "bg-indigo-600 text-white"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {prov}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1 font-bold">
+                  অর্ডার বেছে নিন
+                </label>
+                <select
+                  value={selectedOrderId}
+                  onChange={(e) => setSelectedOrderId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white"
+                >
+                  {safeOrders.length > 0 ? (
+                    safeOrders.map((ord, i) => {
+                      const oid = String(ord?.id ?? i + 1);
+                      return (
+                        <option key={oid} value={oid}>
+                          #{oid} — {ord?.customerName || ord?.name || "গ্রাহক"}{" "}
+                          (৳{ord?.total ?? 0})
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <option value="DEMO-1">নতুন ম্যানুয়াল পার্সেল বুকিং</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-bold">
+                  ডেলিভারি নোট
+                </label>
+                <input
+                  type="text"
+                  value={courierNote}
+                  onChange={(e) => setCourierNote(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={handleSendToCourier}
+                  className="w-full py-2 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold cursor-pointer"
+                >
+                  + {selectedCourierProvider}-এ পাঠান
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="text-xs font-bold text-slate-300">
+                কুরিয়ার ডিসপ্যাচ তালিকা ({courierDispatches.length}টি)
+              </div>
+              {courierDispatches.length === 0 ? (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-slate-400">
+                  এখনো কোনো কুরিয়ার বুকিং যুক্ত করা হয়নি। ওপরে কুরিয়ার ও অর্ডার
+                  বেছে নিয়ে পাঠান।
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {courierDispatches.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-extrabold text-white">
+                          {item.courier} •{" "}
+                          <span className="text-cyan-300 font-mono">
+                            {item.trackingCode}
+                          </span>
+                        </div>
+                        <div className="text-slate-300">
+                          {item.customerName} ({item.phone}) — ৳{item.total}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          {item.address} | {item.note}
+                        </div>
+                      </div>
+
+                      <select
+                        value={item.status}
+                        onChange={(e) =>
+                          handleUpdateCourierStatus(item.id, e.target.value)
+                        }
+                        className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-emerald-300 font-bold"
+                      >
+                        <option value="Booked / Ready to Dispatch">
+                          Booked / Ready to Dispatch
+                        </option>
+                        <option value="Picked by Courier">Picked by Courier</option>
+                        <option value="In Transit">In Transit</option>
+                        <option value="Delivered">Delivered</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         )}
 
@@ -996,7 +1483,7 @@ export default function AdminDashboard({
                   Photo Gallery ({galleryList.length}টি ছবি)
                 </h1>
                 <p className="text-xs text-slate-400">
-                  সরাসরি কম্পিউটার/ফোন থেকে ছবি আপলোড করুন বা URL দিয়ে যোগ করুন
+                  সরাসরি কম্পিউটার/ফোন থেকে ছবি আপলোড করুন বা URL দিয়ে যোগ করুন
                 </p>
               </div>
 
@@ -1148,7 +1635,8 @@ export default function AdminDashboard({
                   Box, Button, Text & Style Editor
                 </h1>
                 <p className="text-xs text-slate-400">
-                  যেকোনো বক্স, বাটন, লেখা বা ছবি বেছে নিয়ে এডিট করুন এবং সরাসরি ছবি আপলোড করুন
+                  যেকোনো বক্স, বাটন, লেখা বা ছবি বেছে নিয়ে এডিট করুন এবং সরাসরি
+                  ছবি আপলোড করুন
                 </p>
               </div>
 
@@ -1222,7 +1710,7 @@ export default function AdminDashboard({
             <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-bold text-cyan-300">
-                  সেকশন অনুযায়ী ছবি আপলোড / পরিবর্তন
+                  সেকশন অনুযায়ী ছবি আপলোড / পরিবর্তন
                 </span>
                 <button
                   type="button"
@@ -1466,7 +1954,8 @@ export default function AdminDashboard({
                   Preview & Edit Workspace
                 </h1>
                 <p className="text-xs text-slate-400">
-                  এখানে লাইভ পেজ ও টুলসহ দেখা যাচ্ছে—পুরো স্ক্রিনে দেখতে পাশে Full Screen View চাপুন
+                  এখানে লাইভ পেজ ও টুলসহ দেখা যাচ্ছে—পুরো স্ক্রিনে দেখতে পাশে Full
+                  Screen View চাপুন
                 </p>
               </div>
 
@@ -1504,9 +1993,12 @@ export default function AdminDashboard({
                 onUpdateStyle={handleUpdateStyle}
                 onResizeElement={handleResizeElement}
                 onAddCustomBlock={handleAddCustomBlock}
+                onUpdateCustomBlock={handleUpdateCustomBlock}
                 onGalleryChange={handleGalleryChange}
                 onUndo={handleUndo}
+                onRedo={handleRedo}
                 canUndo={history.length > 0}
+                canRedo={redoStack.length > 0}
               />
             </div>
           </section>
