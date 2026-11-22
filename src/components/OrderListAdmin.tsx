@@ -145,7 +145,7 @@ export default function OrderListAdmin({
       ? rawPhone
       : rawPhone.startsWith("0")
       ? `88${rawPhone}`
-      : `880${rawPhone}`;
+      : `8801639193531${rawPhone}`;
     const st = getStatusMeta(normalizeStatus(order?.status)).label;
     const msg = encodeURIComponent(
       `আসসালামু আলাইকুম ${order?.name || "গ্রাহক"}, Sohoj Market থেকে আপনার অর্ডার #${order?.id || ""} (${order?.total || 0}৳, স্ট্যাটাস: ${st}) সম্পর্কে যোগাযোগ করছি।`
