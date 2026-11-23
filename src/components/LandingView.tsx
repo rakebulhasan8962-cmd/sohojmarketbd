@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DynamicIcon } from "./DynamicIcon";
 import CheckoutForm from "./CheckoutForm";
 import FAQSection from "./FAQSection";
-import Image from "next/image";
 
 export interface SelectedElement {
   id: string;
@@ -191,7 +190,6 @@ export default function LandingView({
     {}
   );
 
-  // আসল ডিভাইস মোবাইল কি না তা ডিটেক্ট করা
   const [isRealMobile, setIsRealMobile] = useState<boolean>(false);
   useEffect(() => {
     const checkMobile = () => {
@@ -208,7 +206,8 @@ export default function LandingView({
 
   const [tickerVisible, setTickerVisible] = useState(true);
   const [deviceView, setDeviceView] = useState<"desktop" | "mobile">("desktop");
-  const isMobileSim = (isEditMode && deviceView === "mobile") || (!isEditMode && isRealMobile);
+  const isMobileSim =
+    (isEditMode && deviceView === "mobile") || (!isEditMode && isRealMobile);
 
   const [dockPos, setDockPos] = useState<{ x: number; y: number }>({
     x: 12,
@@ -285,7 +284,7 @@ export default function LandingView({
       const targetKey = scopedKey(baseKey);
       let safeValue = value;
       if (field === "fontSize") safeValue = clampNum(value, 10, 64, 16);
-      if (field === "width") safeValue = clampNum(value, 60, 1150, 300);
+      if (field === "width") safeValue = clampNum(value, 60, 1440, 300);
       if (field === "height") safeValue = clampNum(value, 0, 650, 140);
       if (field === "padding") safeValue = clampNum(value, 0, 48, 20);
       if (field === "borderRadius") safeValue = clampNum(value, 0, 48, 16);
@@ -315,7 +314,7 @@ export default function LandingView({
     (baseKey: string, width?: number, height?: number) => {
       const targetKey = scopedKey(baseKey);
       const safeW =
-        width !== undefined ? clampNum(width, 60, 1150, 300) : undefined;
+        width !== undefined ? clampNum(width, 60, 1440, 300) : undefined;
       const safeH =
         height !== undefined ? clampNum(height, 0, 650, 140) : undefined;
 
@@ -420,9 +419,36 @@ export default function LandingView({
     onUpdateContent?.(path, value);
   };
 
+  const allCustomBlocksRaw: CustomBlockItem[] = [
+    ...(Array.isArray(content?.customBlocks) ? content.customBlocks : []),
+    ...localCustomBlocks,
+  ];
+
+  const mergedCustomBlocks: CustomBlockItem[] = allCustomBlocksRaw
+    .reduce<CustomBlockItem[]>((acc, item) => {
+      if (!item || !item.id) return acc;
+      const existingIdx = acc.findIndex((x) => x.id === item.id);
+      if (existingIdx >= 0) {
+        acc[existingIdx] = { ...acc[existingIdx], ...item };
+      } else {
+        acc.push(item);
+      }
+      return acc;
+    }, [])
+    .filter((b) => !deletedBlockIds.includes(b.id));
+
   const handleDeleteCustomBlock = (blkId: string) => {
+    const nextDeleted = deletedBlockIds.includes(blkId)
+      ? deletedBlockIds
+      : [...deletedBlockIds, blkId];
+    setDeletedBlockIds(nextDeleted);
     setLocalCustomBlocks((prev) => prev.filter((b) => b.id !== blkId));
-    setDeletedBlockIds((prev) => (prev.includes(blkId) ? prev : [...prev, blkId]));
+
+    const updatedBlocks = mergedCustomBlocks.filter((b) => b.id !== blkId);
+    setLocalOverrides((prev) => ({ ...prev, customBlocks: updatedBlocks }));
+    onUpdateContent?.("customBlocks", updatedBlocks);
+    onUpdateCustomBlock?.(blkId, { title: "", description: "" });
+
     if (activeEl?.customId === blkId) {
       setActiveEl(null);
     }
@@ -443,7 +469,6 @@ export default function LandingView({
     return `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturate}%) grayscale(${grayscale}%) blur(${blur}px) hue-rotate(${hueRotate}deg)`;
   };
 
-  // মোবাইলে ওভারফ্লো ঠেকাতে width-কে maxWidth: "100%" সহ সুরক্ষিত রাখা হয়েছে
   const getTextCss = (
     key: string,
     defaultSize: number,
@@ -521,7 +546,6 @@ export default function LandingView({
     };
   };
 
-  // ছবি নিজের আসল সাইজ/অ্যাসপেক্ট রেশিও অনুযায়ী ফ্রেম নেবে যাতে কোনো ছবি না কাটে
   const getNaturalImageWrapperCss = (
     key: string,
     defaultRadius: number,
@@ -629,7 +653,7 @@ export default function LandingView({
       const nextW = clampNum(
         currentWidth + (moveEvent.clientX - startX),
         60,
-        1150,
+        1440,
         300
       );
       const nextH = clampNum(
@@ -795,10 +819,7 @@ export default function LandingView({
   const whyUs = content?.whyUs || {};
   const targetAudience = content?.targetAudience || {};
 
-  const allCustomBlocks: CustomBlockItem[] = [
-    ...(Array.isArray(content?.customBlocks) ? content.customBlocks : []),
-    ...localCustomBlocks,
-  ].filter((b) => !deletedBlockIds.includes(b.id));
+  const allCustomBlocks: CustomBlockItem[] = mergedCustomBlocks;
 
   const baseProductPrice = clampNum(
     getFieldValue("pricing.productPrice", content?.pricing?.productPrice ?? 1250),
@@ -905,11 +926,8 @@ export default function LandingView({
     galleryBannerStyle.height,
     0,
     560,
-    isMobileSim ? 210 : 320
+    isMobileSim ? 190 : 300
   );
-  const galleryBannerWidth = galleryBannerStyle.width
-    ? clampNum(galleryBannerStyle.width, 240, 1150, 900)
-    : undefined;
 
   const getCardStyle = (index: number): React.CSSProperties => {
     const total = galleryImages.length;
@@ -949,7 +967,7 @@ export default function LandingView({
     const hasImg = newBoxMode === "photoBox" && newBoxImg.trim() !== "";
     const isTextOnly = newBoxMode === "textBox";
     const created: CustomBlockItem = {
-      id: `blk_${Date.now()}`,
+      id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       mode: newBoxMode,
       title:
         newBoxTitle.trim() ||
@@ -1145,7 +1163,10 @@ export default function LandingView({
                     </label>
                     <button
                       type="button"
-                      onClick={() => handleDeleteCustomBlock(blk.id!)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCustomBlock(blk.id!);
+                      }}
                       className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded cursor-pointer"
                     >
                       Delete
@@ -1377,8 +1398,7 @@ export default function LandingView({
                 className="bg-stone-950 px-2.5 py-2 border-b border-stone-800 flex items-center justify-between gap-1.5 cursor-move"
               >
                 <span className="font-extrabold text-[10px] tracking-wider text-[#A2AB34] truncate">
-                  EDIT BAR (
-                  {deviceView === "mobile" ? "MOBILE" : "DESKTOP"})
+                  EDIT BAR ({deviceView === "mobile" ? "MOBILE" : "DESKTOP"})
                 </span>
                 <div className="flex items-center gap-1 shrink-0">
                   {onUndo && (
@@ -1845,7 +1865,10 @@ export default function LandingView({
                             {blk.id && (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteCustomBlock(blk.id!)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCustomBlock(blk.id!);
+                                }}
                                 className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white font-bold shrink-0 cursor-pointer"
                               >
                                 Delete
@@ -1880,6 +1903,24 @@ export default function LandingView({
                     </div>
 
                     <div>
+                      <label className="block text-[10px] text-stone-400 mb-1">
+                        গ্যালারি ব্যানার কালার
+                      </label>
+                      <input
+                        type="color"
+                        value={galleryBannerStyle.backgroundColor || boxBgColor}
+                        onChange={(e) =>
+                          applyStyle(
+                            "galleryBanner",
+                            "backgroundColor",
+                            e.target.value
+                          )
+                        }
+                        className="w-full h-7 rounded bg-stone-800 border border-stone-700 cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
                       <div className="flex justify-between mb-1">
                         <span>গ্যালারি ফ্রেম সাইজ</span>
                         <span>{galleryCardSize}px</span>
@@ -1898,7 +1939,7 @@ export default function LandingView({
 
                     <div>
                       <div className="flex justify-between mb-1">
-                        <span>বাইরের ব্যানার উচ্চতা (0 দিলে নাই)</span>
+                        <span>ব্যানার উচ্চতা (0 দিলে নাই)</span>
                         <span>{galleryBannerHeight}px</span>
                       </div>
                       <input
@@ -2129,11 +2170,12 @@ export default function LandingView({
                             currentSelected.customId && (
                               <button
                                 type="button"
-                                onClick={() =>
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   handleDeleteCustomBlock(
                                     currentSelected.customId!
-                                  )
-                                }
+                                  );
+                                }}
                                 className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
                               >
                                 Delete
@@ -3031,7 +3073,9 @@ export default function LandingView({
                     >
                       <DynamicIcon
                         name="ShoppingCart"
-                        className={isMobileSim ? "w-4 h-4 shrink-0" : "w-5 h-5 shrink-0"}
+                        className={
+                          isMobileSim ? "w-4 h-4 shrink-0" : "w-5 h-5 shrink-0"
+                        }
                       />
                       <span>অর্ডার করতে চাই</span>
                       {isEditMode && (
@@ -3285,17 +3329,17 @@ export default function LandingView({
           </section>
         )}
 
-        {/* Photo Gallery */}
+        {/* Photo Gallery — ব্যানার এপাশ থেকে ওপাশ পুরো ফ্রেম জুড়ে, প্রতিটি ছবির ফ্রেম ভেতরে ফিট */}
         {galleryImages.length > 0 && (
           <section
             id="gallery"
             style={{
               marginTop: `${isMobileSim ? 18 : 28}px`,
               marginBottom: `${isMobileSim ? 18 : 28}px`,
-              paddingTop: `${isMobileSim ? 12 : 18}px`,
-              paddingBottom: `${isMobileSim ? 12 : 18}px`,
+              paddingTop: `${isMobileSim ? 10 : 16}px`,
+              paddingBottom: `${isMobileSim ? 10 : 16}px`,
             }}
-            className="container mx-auto px-2 max-w-6xl"
+            className="w-full px-2 sm:px-4"
           >
             <div className="mb-4 text-center">
               <h2
@@ -3339,35 +3383,27 @@ export default function LandingView({
                 backgroundColor:
                   galleryBannerHeight <= 0
                     ? "transparent"
-                    : galleryBannerStyle.backgroundColor || "transparent",
+                    : galleryBannerStyle.backgroundColor || boxBgColor,
                 borderRadius: `${globalBorderRadius}px`,
                 padding: "0px",
-                width:
-                  galleryBannerWidth && !isMobileSim
-                    ? `${galleryBannerWidth}px`
-                    : "100%",
+                width: "100%",
                 maxWidth: "100%",
                 height:
                   galleryBannerHeight <= 0
                     ? "auto"
-                    : `${Math.max(0, galleryBannerHeight)}px`,
-                minHeight: "0px",
+                    : `${Math.max(galleryCardSize + 36, galleryBannerHeight)}px`,
+                minHeight:
+                  galleryBannerHeight <= 0
+                    ? `${galleryCardSize + 32}px`
+                    : `${Math.max(galleryCardSize + 36, galleryBannerHeight)}px`,
               }}
-              className={`relative mx-auto flex flex-col justify-center overflow-hidden ${
+              className={`relative w-full flex flex-col justify-center overflow-hidden ${
                 galleryBannerHeight <= 0
                   ? "border-0"
-                  : "border border-[#A2AB34]/30"
+                  : "border border-[#A2AB34]/35"
               } ${highlightClass("gallery-sec")}`}
             >
-              <div
-                style={{
-                  minHeight: `${Math.max(
-                    galleryCardSize + 24,
-                    galleryBannerHeight > 0 ? galleryBannerHeight : 180
-                  )}px`,
-                }}
-                className="relative w-full flex-1 flex items-center justify-center overflow-hidden py-2"
-              >
+              <div className="relative w-full h-full flex-1 flex items-center justify-center overflow-hidden py-3">
                 {galleryImages.map((img, idx) => {
                   const style = getCardStyle(idx);
                   const itemKey = `galleryItem_${idx}`;
@@ -3375,7 +3411,7 @@ export default function LandingView({
                   const perItemSize = clampNum(
                     itemSt.size,
                     50,
-                    360,
+                    Math.min(340, Math.max(120, galleryBannerHeight - 28)),
                     galleryCardSize
                   );
                   const perItemZoom = clampNum(itemSt.zoom, 50, 200, 100);
@@ -3405,7 +3441,7 @@ export default function LandingView({
                         width: `${perItemSize}px`,
                         height: `${perItemSize}px`,
                       }}
-                      className="absolute top-1/2 left-1/2 border-4 border-white shadow-2xl transition-all duration-300 ease-out cursor-pointer bg-black/10 flex items-center justify-center overflow-hidden"
+                      className="absolute top-1/2 left-1/2 border-4 border-white shadow-2xl transition-all duration-300 ease-out cursor-pointer bg-white overflow-hidden"
                     >
                       {renderZoomOverlay(itemKey)}
                       <img
@@ -3416,7 +3452,7 @@ export default function LandingView({
                           transform: `scale(${perItemZoom / 100})`,
                           transformOrigin: "center center",
                         }}
-                        className="w-full h-full object-contain transition-transform duration-200"
+                        className="w-full h-full object-cover transition-transform duration-200"
                       />
                     </div>
                   );
