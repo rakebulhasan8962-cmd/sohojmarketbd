@@ -16,7 +16,7 @@ export interface SelectedElement {
 
 export interface CustomBlockItem {
   id: string;
-  mode?: "flatText" | "photoBox" | "textBox";
+  mode?: "flatText" | "photoBox" | "textBox" | "photoOnly";
   title: string;
   description: string;
   imageUrl?: string;
@@ -74,8 +74,8 @@ function normalizePhone016(raw: any): { display: string; wa: string } {
 
 async function compressImageToSafeDataUrl(
   file: File,
-  maxSide = 1200,
-  quality = 0.82
+  maxSide = 1400,
+  quality = 0.85
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -172,7 +172,7 @@ export default function LandingView({
   const globalHeroTitleSize = clampNum(theme.heroTitleSize, 18, 64, 48);
   const globalHeroDescSize = clampNum(theme.heroDescSize, 12, 32, 17);
   const globalSectionTitleSize = clampNum(theme.sectionTitleSize, 16, 48, 28);
-  const globalHeroImageHeight = clampNum(theme.heroImageHeight, 160, 620, 440);
+  const globalHeroImageHeight = clampNum(theme.heroImageHeight, 160, 720, 440);
   const globalImageShadow =
     theme.imageShadow ?? "0 20px 30px -8px rgba(115, 56, 94, 0.22)";
   const globalBoxShadow =
@@ -189,6 +189,10 @@ export default function LandingView({
   const [localOverrides, setLocalOverrides] = useState<Record<string, any>>(
     {}
   );
+
+  // বক্সের ভেতরে নতুন লেখা/পয়েন্ট যুক্ত করার স্টেটসমূহ
+  const [extraAppendedText, setExtraAppendedText] = useState("");
+  const [extraAppendedDesc, setExtraAppendedDesc] = useState("");
 
   const [isRealMobile, setIsRealMobile] = useState<boolean>(false);
   useEffect(() => {
@@ -220,13 +224,14 @@ export default function LandingView({
     | "image"
     | "gallery"
     | "addBox"
+    | "price"
     | "discount"
     | "payment"
   >("select");
   const [activeEl, setActiveEl] = useState<SelectedElement | null>(null);
 
   const [newBoxMode, setNewBoxMode] = useState<
-    "flatText" | "photoBox" | "textBox"
+    "flatText" | "photoBox" | "textBox" | "photoOnly"
   >("flatText");
   const [newBoxTitle, setNewBoxTitle] = useState("");
   const [newBoxDesc, setNewBoxDesc] = useState("");
@@ -285,12 +290,12 @@ export default function LandingView({
       let safeValue = value;
       if (field === "fontSize") safeValue = clampNum(value, 10, 64, 16);
       if (field === "width") safeValue = clampNum(value, 60, 1440, 300);
-      if (field === "height") safeValue = clampNum(value, 0, 650, 140);
+      if (field === "height") safeValue = clampNum(value, 0, 900, 140);
+      if (field === "size") safeValue = clampNum(value, 50, 600, 220);
       if (field === "padding") safeValue = clampNum(value, 0, 48, 20);
       if (field === "borderRadius") safeValue = clampNum(value, 0, 48, 16);
       if (field === "borderWidth") safeValue = clampNum(value, 0, 12, 1);
-      if (field === "zoom") safeValue = clampNum(value, 50, 200, 100);
-      if (field === "size") safeValue = clampNum(value, 50, 400, 180);
+      if (field === "zoom") safeValue = clampNum(value, 50, 220, 100);
       if (field === "brightness") safeValue = clampNum(value, 30, 180, 100);
       if (field === "contrast") safeValue = clampNum(value, 30, 200, 100);
       if (field === "saturate") safeValue = clampNum(value, 0, 220, 100);
@@ -316,7 +321,7 @@ export default function LandingView({
       const safeW =
         width !== undefined ? clampNum(width, 60, 1440, 300) : undefined;
       const safeH =
-        height !== undefined ? clampNum(height, 0, 650, 140) : undefined;
+        height !== undefined ? clampNum(height, 0, 900, 140) : undefined;
 
       setLocalStyles((prev) => ({
         ...prev,
@@ -402,22 +407,28 @@ export default function LandingView({
     return () => clearInterval(interval);
   }, []);
 
-  const getFieldValue = (path: string | undefined, fallback: any) => {
-    if (!path) return fallback;
-    if (Object.prototype.hasOwnProperty.call(localOverrides, path)) {
-      return localOverrides[path];
-    }
-    const val = path.split(".").reduce((acc: any, key: string) => {
-      if (acc === null || acc === undefined) return undefined;
-      return acc[key];
-    }, content);
-    return val !== undefined ? val : fallback;
-  };
+  const getFieldValue = useCallback(
+    (path: string | undefined, fallback: any) => {
+      if (!path) return fallback;
+      if (Object.prototype.hasOwnProperty.call(localOverrides, path)) {
+        return localOverrides[path];
+      }
+      const val = path.split(".").reduce((acc: any, key: string) => {
+        if (acc === null || acc === undefined) return undefined;
+        return acc[key];
+      }, content);
+      return val !== undefined ? val : fallback;
+    },
+    [localOverrides, content]
+  );
 
-  const applyContentChange = (path: string, value: any) => {
-    setLocalOverrides((prev) => ({ ...prev, [path]: value }));
-    onUpdateContent?.(path, value);
-  };
+  const applyContentChange = useCallback(
+    (path: string, value: any) => {
+      setLocalOverrides((prev) => ({ ...prev, [path]: value }));
+      onUpdateContent?.(path, value);
+    },
+    [onUpdateContent]
+  );
 
   const allCustomBlocksRaw: CustomBlockItem[] = [
     ...(Array.isArray(content?.customBlocks) ? content.customBlocks : []),
@@ -454,9 +465,108 @@ export default function LandingView({
     }
   };
 
+  // বক্সের ভেতরে নতুন লেখা / পয়েন্ট যুক্ত করার ফাংশন
+  const handleAppendTextToSelectedBox = (sel: SelectedElement) => {
+    const titleVal = extraAppendedText.trim();
+    const descVal = extraAppendedDesc.trim();
+    if (!titleVal && !descVal) return;
+
+    if (sel.type === "customBlock" && sel.customId) {
+      const targetBlk = mergedCustomBlocks.find((b) => b.id === sel.customId);
+      if (targetBlk) {
+        const combinedLine = [titleVal, descVal].filter(Boolean).join(" : ");
+        const nextDesc = targetBlk.description
+          ? `${targetBlk.description}\n${combinedLine}`
+          : combinedLine;
+        setLocalCustomBlocks((prev) =>
+          prev.map((b) =>
+            b.id === sel.customId ? { ...b, description: nextDesc } : b
+          )
+        );
+        onUpdateCustomBlock?.(sel.customId, { description: nextDesc });
+      }
+      setExtraAppendedText("");
+      setExtraAppendedDesc("");
+      return;
+    }
+
+    if (sel.styleKey === "detailsPointsBox") {
+      const existing = Array.isArray(content?.details?.points)
+        ? content.details.points
+        : [];
+      const currentPts = getFieldValue("details.points", existing);
+      const nextPts = [
+        ...(Array.isArray(currentPts) ? currentPts : []),
+        {
+          title: titleVal || "নতুন পয়েন্ট",
+          description: descVal || "এখানে বিস্তারিত তথ্য যুক্ত করা হয়েছে।",
+        },
+      ];
+      applyContentChange("details.points", nextPts);
+    } else if (sel.styleKey === "whyUsBox") {
+      const existing = Array.isArray(content?.whyUs?.points)
+        ? content.whyUs.points
+        : [];
+      const currentPts = getFieldValue("whyUs.points", existing);
+      const nextPts = [
+        ...(Array.isArray(currentPts) ? currentPts : []),
+        {
+          title: titleVal || "নতুন বৈশিষ্ট্য",
+          description: descVal || "",
+        },
+      ];
+      applyContentChange("whyUs.points", nextPts);
+    } else if (sel.styleKey === "targetBox") {
+      const existing = Array.isArray(content?.targetAudience?.points)
+        ? content.targetAudience.points
+        : [];
+      const currentPts = getFieldValue("targetAudience.points", existing);
+      const combined =
+        [titleVal, descVal].filter(Boolean).join(" : ") || "নতুন পয়েন্ট";
+      const nextPts = [
+        ...(Array.isArray(currentPts) ? currentPts : []),
+        combined,
+      ];
+      applyContentChange("targetAudience.points", nextPts);
+    } else if (sel.styleKey.startsWith("packageBox_")) {
+      const pkgIdx = Number(sel.styleKey.replace("packageBox_", ""));
+      const baseDesc = getFieldValue(
+        `packages.${pkgIdx}.description`,
+        content?.packages?.[pkgIdx]?.description || ""
+      );
+      const addition = [titleVal, descVal].filter(Boolean).join(" : ");
+      applyContentChange(
+        `packages.${pkgIdx}.description`,
+        baseDesc ? `${baseDesc} • ${addition}` : addition
+      );
+    } else if (sel.styleKey === "detailsBox") {
+      const combined = [titleVal, descVal].filter(Boolean).join(" : ");
+      const baseT1 = getFieldValue(
+        "details.text1",
+        content?.details?.text1 || ""
+      );
+      applyContentChange(
+        "details.text1",
+        baseT1 ? `${baseT1}\n${combined}` : combined
+      );
+    } else {
+      const noteKey = `extraBoxNotes.${sel.styleKey}`;
+      const existingNotes = getFieldValue(noteKey, []);
+      const combined = [titleVal, descVal].filter(Boolean).join(" : ");
+      applyContentChange(noteKey, [
+        ...(Array.isArray(existingNotes) ? existingNotes : []),
+        combined,
+      ]);
+    }
+
+    setExtraAppendedText("");
+    setExtraAppendedDesc("");
+  };
+
   const handleDeleteDiscount = () => {
     applyContentChange("pricing.discountEnabled", false);
     applyContentChange("pricing.discountValue", 0);
+    applyContentChange("pricing.freeShipping", false);
   };
 
   const buildPhotoshopFilter = (st: any) => {
@@ -504,7 +614,7 @@ export default function LandingView({
           ? `${clampNum(st.width, 60, 1150, 300)}px`
           : undefined,
       maxWidth: "100%",
-      height: st.height ? `${clampNum(st.height, 24, 650, 60)}px` : undefined,
+      height: st.height ? `${clampNum(st.height, 24, 900, 60)}px` : undefined,
       overflowWrap: "anywhere",
       wordBreak: "break-word",
     };
@@ -529,7 +639,7 @@ export default function LandingView({
       maxWidth: "100%",
       minHeight:
         st.height && !isMobileSim
-          ? `${clampNum(st.height, 40, 650, 180)}px`
+          ? `${clampNum(st.height, 40, 900, 180)}px`
           : undefined,
       borderRadius: `${clampNum(st.borderRadius, 0, 48, defaultRadius)}px`,
       padding: `${clampNum(st.padding, 0, 48, defaultPadding)}px`,
@@ -572,8 +682,8 @@ export default function LandingView({
 
   const getNaturalImageCss = (key: string): React.CSSProperties => {
     const st = getElStyle(key);
-    const zoomScale = clampNum(st.zoom, 50, 200, 100) / 100;
-    const customH = st.height ? clampNum(st.height, 80, 650, 0) : 0;
+    const zoomScale = clampNum(st.zoom, 50, 220, 100) / 100;
+    const customH = st.height ? clampNum(st.height, 80, 900, 0) : 0;
     return {
       filter: buildPhotoshopFilter(st),
       objectPosition: st.objectPosition || "center",
@@ -581,14 +691,14 @@ export default function LandingView({
       transformOrigin: "center center",
       width: "100%",
       height: customH > 0 ? `${customH}px` : "auto",
-      maxHeight: isMobileSim ? "380px" : "560px",
+      maxHeight: isMobileSim ? "380px" : "680px",
       display: "block",
     };
   };
 
   const renderZoomOverlay = (styleKey: string) => {
     if (!isEditMode) return null;
-    const zoomVal = clampNum(getElStyle(styleKey).zoom, 50, 200, 100);
+    const zoomVal = clampNum(getElStyle(styleKey).zoom, 50, 220, 100);
     return (
       <div
         onClick={(e) => e.stopPropagation()}
@@ -659,7 +769,7 @@ export default function LandingView({
       const nextH = clampNum(
         currentHeight + (moveEvent.clientY - startY),
         0,
-        650,
+        900,
         140
       );
       applyResize(styleKey, Math.round(nextW), Math.round(nextH));
@@ -742,6 +852,12 @@ export default function LandingView({
       content?.pricing?.discountEnabled ?? false
     )
   );
+  const freeShipping = Boolean(
+    getFieldValue(
+      "pricing.freeShipping",
+      content?.pricing?.freeShipping ?? false
+    )
+  );
   const discountType: "flat" | "percent" =
     getFieldValue(
       "pricing.discountType",
@@ -819,6 +935,24 @@ export default function LandingView({
   const whyUs = content?.whyUs || {};
   const targetAudience = content?.targetAudience || {};
 
+  const activeDetailsPoints = Array.isArray(
+    getFieldValue("details.points", details.points)
+  )
+    ? getFieldValue("details.points", details.points)
+    : [];
+
+  const activeWhyUsPoints = Array.isArray(
+    getFieldValue("whyUs.points", whyUs.points)
+  )
+    ? getFieldValue("whyUs.points", whyUs.points)
+    : [];
+
+  const activeTargetPoints = Array.isArray(
+    getFieldValue("targetAudience.points", targetAudience.points)
+  )
+    ? getFieldValue("targetAudience.points", targetAudience.points)
+    : [];
+
   const allCustomBlocks: CustomBlockItem[] = mergedCustomBlocks;
 
   const baseProductPrice = clampNum(
@@ -827,6 +961,28 @@ export default function LandingView({
     1000000,
     1250
   );
+  const baseShippingInside = clampNum(
+    getFieldValue(
+      "pricing.shippingInside",
+      content?.pricing?.shippingInside ?? 60
+    ),
+    0,
+    50000,
+    60
+  );
+  const baseShippingOutside = clampNum(
+    getFieldValue(
+      "pricing.shippingOutside",
+      content?.pricing?.shippingOutside ?? 120
+    ),
+    0,
+    50000,
+    120
+  );
+
+  const effectiveShippingInside = freeShipping ? 0 : baseShippingInside;
+  const effectiveShippingOutside = freeShipping ? 0 : baseShippingOutside;
+
   const computedDiscountAmount = !discountEnabled
     ? 0
     : discountType === "percent"
@@ -846,6 +1002,9 @@ export default function LandingView({
     }),
     originalPrice: baseProductPrice,
     productPrice: baseProductPrice,
+    shippingInside: effectiveShippingInside,
+    shippingOutside: effectiveShippingOutside,
+    freeShipping,
     discountPrice: computedDiscountedPrice,
     discountEnabled,
     discountType,
@@ -917,16 +1076,16 @@ export default function LandingView({
 
   const galleryCardSize = clampNum(
     getElStyle("galleryCard").size,
-    60,
-    360,
-    isMobileSim ? 140 : 220
+    50,
+    600,
+    isMobileSim ? 160 : 250
   );
   const galleryBannerStyle = getElStyle("galleryBanner");
   const galleryBannerHeight = clampNum(
     galleryBannerStyle.height,
     0,
-    560,
-    isMobileSim ? 190 : 300
+    900,
+    isMobileSim ? 210 : 340
   );
 
   const getCardStyle = (index: number): React.CSSProperties => {
@@ -938,8 +1097,8 @@ export default function LandingView({
 
     const absDiff = Math.abs(diff);
     const stepSpacing = isMobileSim
-      ? Math.max(88, galleryCardSize * 0.7)
-      : Math.max(150, galleryCardSize * 0.85);
+      ? Math.max(88, galleryCardSize * 0.72)
+      : Math.max(150, galleryCardSize * 0.88);
     const translateX = diff * stepSpacing;
     const scale =
       absDiff === 0 ? 1 : absDiff === 1 ? 0.82 : absDiff === 2 ? 0.66 : 0.55;
@@ -953,7 +1112,7 @@ export default function LandingView({
       borderRadius: `${clampNum(
         getElStyle("galleryCard").borderRadius,
         0,
-        36,
+        48,
         globalBorderRadius
       )}px`,
       transform: `translate(-50%, -50%) translateX(${translateX}px) scale(${scale})`,
@@ -964,31 +1123,45 @@ export default function LandingView({
   };
 
   const handleAddBoxOnPage = () => {
-    const hasImg = newBoxMode === "photoBox" && newBoxImg.trim() !== "";
+    const isPhotoOnly = newBoxMode === "photoOnly";
+    const hasImg =
+      (newBoxMode === "photoBox" || isPhotoOnly) && newBoxImg.trim() !== "";
     const isTextOnly = newBoxMode === "textBox";
     const created: CustomBlockItem = {
       id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       mode: newBoxMode,
-      title:
-        newBoxTitle.trim() ||
-        (newBoxMode === "flatText"
-          ? "নতুন ফ্ল্যাট লেখার বক্স"
-          : isTextOnly
-          ? "নতুন টেক্সট বক্স"
-          : "নতুন ছবি যুক্ত বক্স"),
-      description:
-        newBoxDesc.trim() ||
-        "এখানে আপনার পছন্দমতো লেখা লিখুন, পরে ছবি যুক্ত করুন বা ডিজাইন সাজান।",
-      imageUrl: hasImg ? newBoxImg.trim() : undefined,
+      title: isPhotoOnly
+        ? ""
+        : newBoxTitle.trim() ||
+          (newBoxMode === "flatText"
+            ? "নতুন ফ্ল্যাট লেখার বক্স"
+            : isTextOnly
+            ? "নতুন টেক্সট বক্স"
+            : "নতুন ছবি যুক্ত বক্স"),
+      description: isPhotoOnly
+        ? ""
+        : newBoxDesc.trim() ||
+          "এখানে আপনার পছন্দমতো লেখা লিখুন, পরে ছবি যুক্ত করুন বা ডিজাইন সাজান।",
+      imageUrl: hasImg
+        ? newBoxImg.trim()
+        : isPhotoOnly
+        ? DEFAULT_PHOTO
+        : undefined,
       position: newBoxPos,
-      bgColor: isTextOnly ? "transparent" : boxBgColor,
+      bgColor: isTextOnly || isPhotoOnly ? "transparent" : boxBgColor,
       textColor: textColor,
       width: clampNum(newBoxWidth, 120, 1150, isTextOnly ? 680 : 1100),
       height: clampNum(
         newBoxHeight,
         60,
-        520,
-        newBoxMode === "flatText" ? 130 : isTextOnly ? 100 : 220
+        750,
+        newBoxMode === "flatText"
+          ? 130
+          : isTextOnly
+          ? 100
+          : isPhotoOnly
+          ? 320
+          : 220
       ),
       borderRadius: clampNum(
         newBoxRadius,
@@ -996,7 +1169,7 @@ export default function LandingView({
         48,
         newBoxMode === "flatText" ? 10 : isTextOnly ? 8 : 20
       ),
-      padding: newBoxMode === "flatText" ? 16 : globalBoxPadding,
+      padding: isPhotoOnly ? 0 : newBoxMode === "flatText" ? 16 : globalBoxPadding,
       shadow: isTextOnly ? "none" : globalBoxShadow,
     };
     setLocalCustomBlocks((prev) => [...prev, created]);
@@ -1010,10 +1183,16 @@ export default function LandingView({
     const compressed = await compressImageToSafeDataUrl(file);
     setLocalCustomBlocks((prev) =>
       prev.map((b) =>
-        b.id === blkId ? { ...b, mode: "photoBox", imageUrl: compressed } : b
+        b.id === blkId
+          ? {
+              ...b,
+              mode: b.mode === "photoOnly" ? "photoOnly" : "photoBox",
+              imageUrl: compressed,
+            }
+          : b
       )
     );
-    onUpdateCustomBlock?.(blkId, { mode: "photoBox", imageUrl: compressed });
+    onUpdateCustomBlock?.(blkId, { imageUrl: compressed });
   };
 
   const handleAddGalleryItem = () => {
@@ -1050,6 +1229,37 @@ export default function LandingView({
     onGalleryChange?.(next);
   };
 
+  const renderExtraBoxNotes = (styleKey: string, defaultColor: string) => {
+    const notes = getFieldValue(`extraBoxNotes.${styleKey}`, []);
+    if (!Array.isArray(notes) || notes.length === 0) return null;
+    return (
+      <div className="mt-3 space-y-1.5 border-t border-current/15 pt-2.5">
+        {notes.map((note: string, idx: number) => (
+          <div
+            key={idx}
+            className="flex items-start justify-between gap-2 text-xs sm:text-sm"
+            style={{ color: defaultColor }}
+          >
+            <span>• {note}</span>
+            {isEditMode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const next = notes.filter((_: any, i: number) => i !== idx);
+                  applyContentChange(`extraBoxNotes.${styleKey}`, next);
+                }}
+                className="text-[10px] text-rose-500 hover:underline shrink-0 cursor-pointer"
+              >
+                মুছুন
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderCustomBlocks = (
     pos: "afterHero" | "afterGallery" | "beforeFooter"
   ) => {
@@ -1062,22 +1272,27 @@ export default function LandingView({
           {items.map((blk, i) => {
             const stKey = `customBlock_${blk.id || i}`;
             const st = getElStyle(stKey);
+            const isPhotoOnly =
+              blk.mode === "photoOnly" ||
+              (!blk.title && !blk.description && blk.imageUrl);
             const w = isMobileSim
               ? 340
               : clampNum(st.width ?? blk.width, 120, 1150, 520);
-            const h = clampNum(st.height ?? blk.height, 60, 520, 160);
+            const h = clampNum(st.height ?? blk.height, 60, 750, 160);
             const r = clampNum(
               st.borderRadius ?? blk.borderRadius,
               0,
               48,
               globalBorderRadius
             );
-            const p = clampNum(
-              st.padding ?? blk.padding,
-              0,
-              48,
-              isMobileSim ? 14 : globalBoxPadding
-            );
+            const p = isPhotoOnly
+              ? clampNum(st.padding ?? blk.padding, 0, 48, 0)
+              : clampNum(
+                  st.padding ?? blk.padding,
+                  0,
+                  48,
+                  isMobileSim ? 14 : globalBoxPadding
+                );
 
             return (
               <div
@@ -1085,17 +1300,26 @@ export default function LandingView({
                 onClick={(e) =>
                   handleSelect(e, {
                     id: `custom-blk-${blk.id || i}`,
-                    label: `কাস্টম বক্স: ${blk.title}`,
-                    type: "customBlock",
+                    label: isPhotoOnly
+                      ? `ছবির বক্স #${i + 1}`
+                      : `কাস্টম বক্স: ${blk.title}`,
+                    type: isPhotoOnly ? "image" : "customBlock",
                     styleKey: stKey,
                     customId: blk.id,
                   })
                 }
                 style={{
-                  backgroundColor: st.backgroundColor || blk.bgColor || boxBgColor,
+                  backgroundColor:
+                    st.backgroundColor ||
+                    blk.bgColor ||
+                    (isPhotoOnly ? "transparent" : boxBgColor),
                   color: st.color || blk.textColor || textColor,
                   borderColor: st.borderColor || "rgba(0,0,0,0.12)",
-                  borderWidth: st.borderColor ? "2px" : "1px",
+                  borderWidth: st.borderColor
+                    ? "2px"
+                    : isPhotoOnly
+                    ? "0px"
+                    : "1px",
                   borderStyle: "solid",
                   width: isMobileSim ? "100%" : `${w}px`,
                   maxWidth: "100%",
@@ -1108,43 +1332,58 @@ export default function LandingView({
                   `custom-blk-${blk.id || i}`
                 )}`}
               >
-                <div
-                  className={
-                    blk.imageUrl
-                      ? "grid grid-cols-1 sm:grid-cols-2 gap-4 items-center"
-                      : "space-y-1.5"
-                  }
-                >
-                  <div>
-                    <h3
-                      style={{ color: st.color || primaryColor }}
-                      className="text-base sm:text-lg font-extrabold mb-1 break-words"
-                    >
-                      {blk.title}
-                    </h3>
-                    <p
-                      style={{ color: st.color || mutedTextColor }}
-                      className="text-xs sm:text-sm leading-relaxed break-words"
-                    >
-                      {blk.description}
-                    </p>
+                {isPhotoOnly ? (
+                  <div className="w-full relative overflow-hidden">
+                    {renderZoomOverlay(`${stKey}_img`)}
+                    <img
+                      src={blk.imageUrl || DEFAULT_PHOTO}
+                      alt={blk.title || "Custom Photo"}
+                      style={getNaturalImageCss(`${stKey}_img`)}
+                      className="w-full h-auto object-contain"
+                    />
                   </div>
-                  {blk.imageUrl && (
-                    <div className="w-full rounded-xl overflow-hidden border border-black/10">
-                      <img
-                        src={blk.imageUrl}
-                        alt={blk.title}
-                        style={getNaturalImageCss(`${stKey}_img`)}
-                        className="w-full h-auto object-contain"
-                      />
+                ) : (
+                  <div
+                    className={
+                      blk.imageUrl
+                        ? "grid grid-cols-1 sm:grid-cols-2 gap-4 items-center"
+                        : "space-y-1.5"
+                    }
+                  >
+                    <div>
+                      <h3
+                        style={{ color: st.color || primaryColor }}
+                        className="text-base sm:text-lg font-extrabold mb-1 break-words"
+                      >
+                        {blk.title}
+                      </h3>
+                      <p
+                        style={{ color: st.color || mutedTextColor }}
+                        className="text-xs sm:text-sm leading-relaxed break-words whitespace-pre-line"
+                      >
+                        {blk.description}
+                      </p>
                     </div>
-                  )}
-                </div>
+                    {blk.imageUrl && (
+                      <div className="w-full rounded-xl overflow-hidden border border-black/10 relative">
+                        {renderZoomOverlay(`${stKey}_img`)}
+                        <img
+                          src={blk.imageUrl}
+                          alt={blk.title}
+                          style={getNaturalImageCss(`${stKey}_img`)}
+                          className="w-full h-auto object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {isEditMode && blk.id && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-2 flex flex-wrap items-center gap-2"
+                    className={`${
+                      isPhotoOnly ? "p-2 bg-black/60 backdrop-blur-sm" : "mt-2"
+                    } flex flex-wrap items-center gap-2`}
                   >
                     <label className="inline-flex items-center gap-1 bg-stone-900/85 hover:bg-stone-900 text-amber-300 text-[10px] font-bold px-2.5 py-1 rounded cursor-pointer">
                       <span>+ ছবি যুক্ত / বদলান</span>
@@ -1178,7 +1417,7 @@ export default function LandingView({
                   <div
                     onMouseDown={(e) => handleDragResize(e, stKey, w, h)}
                     title="টেনে সাইজ বড়-ছোট করুন"
-                    className="absolute bottom-2.5 right-2.5 w-6 h-6 rounded-md bg-[#73385E] text-white text-xs flex items-center justify-center cursor-nwse-resize select-none shadow"
+                    className="absolute bottom-2.5 right-2.5 w-6 h-6 rounded-md bg-[#73385E] text-white text-xs flex items-center justify-center cursor-nwse-resize select-none shadow z-30"
                   >
                     ↘
                   </div>
@@ -1319,9 +1558,14 @@ export default function LandingView({
                     title: "Gallery Banner, Frame & Photos",
                   },
                   {
+                    id: "price",
+                    icon: "DollarSign",
+                    title: "মূল্য নির্ধারণ (Price & Delivery Charge)",
+                  },
+                  {
                     id: "discount",
                     icon: "Tag",
-                    title: "আসল মূল্য ও Discount সেটিংস",
+                    title: "Discount ও Free Delivery সেটিংস",
                   },
                   {
                     id: "payment",
@@ -1331,7 +1575,7 @@ export default function LandingView({
                   {
                     id: "addBox",
                     icon: "PlusSquare",
-                    title: "নতুন বক্স / লেখা তৈরি",
+                    title: "নতুন বক্স / ছবি / লেখা তৈরি",
                   },
                 ] as const
               ).map((t) => (
@@ -1469,6 +1713,91 @@ export default function LandingView({
                   </button>
                 </div>
 
+                {/* আলাদা মূল্য নির্ধারণ (Price & Delivery Charge) প্যানেল */}
+                {activeTool === "price" && (
+                  <div className="space-y-2.5 bg-stone-950/80 p-2.5 rounded-lg border border-stone-800">
+                    <div className="font-bold text-[#A2AB34]">
+                      মূল্য নির্ধারণ (Product & Delivery Price)
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-stone-400 mb-1">
+                        পণ্যের মূল্য (Product Price ৳)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000000"
+                        value={baseProductPrice}
+                        onChange={(e) =>
+                          applyContentChange(
+                            "pricing.productPrice",
+                            clampNum(e.target.value, 1, 1000000, 1250)
+                          )
+                        }
+                        className="w-full bg-stone-900 border border-stone-700 rounded px-2.5 py-1.5 text-white font-bold"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className="block text-[10px] text-stone-400 mb-1">
+                          ঢাকার ভেতরে চার্জ (৳)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="50000"
+                          value={baseShippingInside}
+                          onChange={(e) =>
+                            applyContentChange(
+                              "pricing.shippingInside",
+                              clampNum(e.target.value, 0, 50000, 60)
+                            )
+                          }
+                          className="w-full bg-stone-900 border border-stone-700 rounded px-2 py-1.5 text-white font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-stone-400 mb-1">
+                          ঢাকার বাইরে চার্জ (৳)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="50000"
+                          value={baseShippingOutside}
+                          onChange={(e) =>
+                            applyContentChange(
+                              "pricing.shippingOutside",
+                              clampNum(e.target.value, 0, 50000, 120)
+                            )
+                          }
+                          className="w-full bg-stone-900 border border-stone-700 rounded px-2 py-1.5 text-white font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-stone-900 border border-stone-800 rounded p-2 text-[11px] space-y-1">
+                      <div className="flex justify-between text-stone-300">
+                        <span>বর্তমান পণ্য মূল্য:</span>
+                        <span className="font-bold text-white">
+                          {computedDiscountedPrice}৳
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-stone-300">
+                        <span>ডেলিভারি (ভেতরে / বাইরে):</span>
+                        <span className="font-bold text-emerald-300">
+                          {freeShipping
+                            ? "ফ্রি ডেলিভারি (0৳)"
+                            : `${effectiveShippingInside}৳ / ${effectiveShippingOutside}৳`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Payment অপশন প্যানেল */}
                 {activeTool === "payment" && (
                   <div className="space-y-2 bg-stone-950/80 p-2.5 rounded-lg border border-stone-800">
@@ -1507,12 +1836,12 @@ export default function LandingView({
                   </div>
                 )}
 
-                {/* আসল মূল্য ও Discount কন্ট্রোল প্যানেল */}
+                {/* আসল মূল্য, Discount ও Free Delivery কন্ট্রোল প্যানেল */}
                 {activeTool === "discount" && (
                   <div className="space-y-2.5 bg-stone-950/80 p-2.5 rounded-lg border border-stone-800">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-[#A2AB34]">
-                        আসল মূল্য ও Discount সেটিংস
+                        Discount ও ডেলিভারি ছাড়
                       </span>
                       <div className="flex items-center gap-2">
                         <button
@@ -1540,6 +1869,29 @@ export default function LandingView({
                         </label>
                       </div>
                     </div>
+
+                    {/* ডিসকাউন্ট হিসেবে ডেলিভারি চার্জ ফ্রি করার অপশন */}
+                    <label className="flex items-center justify-between gap-2 bg-stone-900 border border-emerald-700/60 rounded px-2.5 py-2 cursor-pointer">
+                      <div>
+                        <div className="text-[11px] font-bold text-emerald-300">
+                          🚚 ডেলিভারি চার্জ ছাড় (Free Delivery)
+                        </div>
+                        <div className="text-[9.5px] text-stone-400">
+                          চালু করলে ভেতরে ও বাইরে ডেলিভারি চার্জ ০৳ হবে
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={freeShipping}
+                        onChange={(e) =>
+                          applyContentChange(
+                            "pricing.freeShipping",
+                            e.target.checked
+                          )
+                        }
+                        className="accent-[#A2AB34] w-4 h-4 shrink-0"
+                      />
+                    </label>
 
                     <div>
                       <label className="block text-[10px] text-stone-400 mb-1">
@@ -1661,6 +2013,14 @@ export default function LandingView({
                         <span>ছাড় ({discountLabel || "Discount"}):</span>
                         <span>−{computedDiscountAmount}৳</span>
                       </div>
+                      <div className="flex justify-between text-cyan-300 font-bold">
+                        <span>ডেলিভারি চার্জ:</span>
+                        <span>
+                          {freeShipping
+                            ? "ফ্রি (0৳)"
+                            : `${baseShippingInside}৳ / ${baseShippingOutside}৳`}
+                        </span>
+                      </div>
                       <div className="flex justify-between text-white font-extrabold border-t border-stone-800 pt-1">
                         <span>ডিসকাউন্ট মূল্য:</span>
                         <span>{computedDiscountedPrice}৳</span>
@@ -1669,14 +2029,14 @@ export default function LandingView({
                   </div>
                 )}
 
-                {/* Add Box প্যানেল */}
+                {/* Add Box প্যানেল — শুধু ছবি সহ ৪টি অপশন */}
                 {activeTool === "addBox" && (
                   <div className="space-y-2.5 bg-stone-950/70 p-2.5 rounded-lg border border-stone-800">
                     <div className="font-bold text-[#A2AB34]">
-                      নতুন বক্স / লেখা তৈরি করুন
+                      নতুন বক্স / ছবি / লেখা তৈরি করুন
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1 bg-stone-900 p-1 rounded border border-stone-800 text-[10px]">
+                    <div className="grid grid-cols-2 gap-1 bg-stone-900 p-1 rounded border border-stone-800 text-[10px]">
                       <button
                         type="button"
                         onClick={() => {
@@ -1725,24 +2085,45 @@ export default function LandingView({
                       >
                         টেক্সট বক্স
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewBoxMode("photoOnly");
+                          if (!newBoxImg) setNewBoxImg(DEFAULT_PHOTO);
+                          setNewBoxHeight(320);
+                        }}
+                        style={
+                          newBoxMode === "photoOnly"
+                            ? { backgroundColor: "#A2AB34", color: "#1E1B24" }
+                            : undefined
+                        }
+                        className="py-1 rounded font-bold cursor-pointer"
+                      >
+                        শুধু ছবি
+                      </button>
                     </div>
 
-                    <input
-                      type="text"
-                      value={newBoxTitle}
-                      onChange={(e) => setNewBoxTitle(e.target.value)}
-                      placeholder="শিরোনাম লিখুন"
-                      className="w-full bg-stone-900 border border-stone-700 rounded px-2.5 py-1.5 text-white"
-                    />
-                    <textarea
-                      rows={2}
-                      value={newBoxDesc}
-                      onChange={(e) => setNewBoxDesc(e.target.value)}
-                      placeholder="লেখার বক্সে যা রাখতে চান তা লিখুন"
-                      className="w-full bg-stone-900 border border-stone-700 rounded px-2.5 py-1.5 text-white"
-                    />
+                    {newBoxMode !== "photoOnly" && (
+                      <>
+                        <input
+                          type="text"
+                          value={newBoxTitle}
+                          onChange={(e) => setNewBoxTitle(e.target.value)}
+                          placeholder="শিরোনাম লিখুন"
+                          className="w-full bg-stone-900 border border-stone-700 rounded px-2.5 py-1.5 text-white"
+                        />
+                        <textarea
+                          rows={2}
+                          value={newBoxDesc}
+                          onChange={(e) => setNewBoxDesc(e.target.value)}
+                          placeholder="লেখার বক্সে যা রাখতে চান তা লিখুন"
+                          className="w-full bg-stone-900 border border-stone-700 rounded px-2.5 py-1.5 text-white"
+                        />
+                      </>
+                    )}
 
-                    {newBoxMode === "photoBox" && (
+                    {(newBoxMode === "photoBox" ||
+                      newBoxMode === "photoOnly") && (
                       <div className="space-y-1.5">
                         <input
                           type="text"
@@ -1752,7 +2133,7 @@ export default function LandingView({
                           className="w-full bg-stone-900 border border-stone-700 rounded px-2.5 py-1.5 text-white"
                         />
                         <label className="block w-full bg-stone-900 hover:bg-stone-800 border border-dashed border-stone-600 rounded px-2 py-1 text-center text-[10px] text-[#A2AB34] font-bold cursor-pointer">
-                          📁 বক্সের জন্য ছবি আপলোড
+                          📁 ছবি আপলোড করুন
                           <input
                             type="file"
                             accept="image/*"
@@ -1824,17 +2205,17 @@ export default function LandingView({
                     </div>
                     <div>
                       <div className="flex justify-between mb-1">
-                        <span>Height (Max 520px)</span>
+                        <span>Height (Max 750px)</span>
                         <span>{newBoxHeight}px</span>
                       </div>
                       <input
                         type="range"
                         min="60"
-                        max="520"
+                        max="750"
                         value={newBoxHeight}
                         onChange={(e) =>
                           setNewBoxHeight(
-                            clampNum(e.target.value, 60, 520, 180)
+                            clampNum(e.target.value, 60, 750, 180)
                           )
                         }
                         className="w-full accent-[#A2AB34]"
@@ -1860,7 +2241,7 @@ export default function LandingView({
                             className="flex items-center justify-between gap-2 bg-stone-900 border border-stone-800 rounded px-2 py-1 text-[10px]"
                           >
                             <span className="truncate text-stone-200 font-semibold">
-                              {blk.title}
+                              {blk.title || `ছবির বক্স #${idx + 1}`}
                             </span>
                             {blk.id && (
                               <button
@@ -1922,13 +2303,13 @@ export default function LandingView({
 
                     <div>
                       <div className="flex justify-between mb-1">
-                        <span>গ্যালারি ফ্রেম সাইজ</span>
+                        <span>গ্যালারি ফ্রেম সাইজ (Max 600px)</span>
                         <span>{galleryCardSize}px</span>
                       </div>
                       <input
                         type="range"
-                        min="60"
-                        max="360"
+                        min="50"
+                        max="600"
                         value={galleryCardSize}
                         onChange={(e) =>
                           applyStyle("galleryCard", "size", Number(e.target.value))
@@ -1939,13 +2320,13 @@ export default function LandingView({
 
                     <div>
                       <div className="flex justify-between mb-1">
-                        <span>ব্যানার উচ্চতা (0 দিলে নাই)</span>
+                        <span>ব্যানার উচ্চতা (Max 900px, 0 দিলে নাই)</span>
                         <span>{galleryBannerHeight}px</span>
                       </div>
                       <input
                         type="range"
                         min="0"
-                        max="560"
+                        max="900"
                         value={galleryBannerHeight}
                         onChange={(e) =>
                           applyStyle(
@@ -1965,7 +2346,7 @@ export default function LandingView({
                           {clampNum(
                             getElStyle("galleryCard").borderRadius,
                             0,
-                            36,
+                            48,
                             globalBorderRadius
                           )}
                           px
@@ -1974,11 +2355,11 @@ export default function LandingView({
                       <input
                         type="range"
                         min="0"
-                        max="36"
+                        max="48"
                         value={clampNum(
                           getElStyle("galleryCard").borderRadius,
                           0,
-                          36,
+                          48,
                           globalBorderRadius
                         )}
                         onChange={(e) =>
@@ -2065,16 +2446,47 @@ export default function LandingView({
                             className="w-full bg-stone-950 border border-stone-700 rounded px-2 py-1 text-white"
                           />
                           <div className="flex justify-between text-[10px] text-stone-400">
-                            <span>ছবি #{editingGalIdx + 1} Zoom</span>
+                            <span>ছবি #{editingGalIdx + 1} ফ্রেম সাইজ</span>
                             <span>
-                              {clampNum(activeGalStyle.zoom, 50, 200, 100)}%
+                              {clampNum(
+                                activeGalStyle.size,
+                                50,
+                                600,
+                                galleryCardSize
+                              )}
+                              px
                             </span>
                           </div>
                           <input
                             type="range"
                             min="50"
-                            max="200"
-                            value={clampNum(activeGalStyle.zoom, 50, 200, 100)}
+                            max="600"
+                            value={clampNum(
+                              activeGalStyle.size,
+                              50,
+                              600,
+                              galleryCardSize
+                            )}
+                            onChange={(e) =>
+                              applyStyle(
+                                activeGalStyleKey,
+                                "size",
+                                Number(e.target.value)
+                              )
+                            }
+                            className="w-full accent-[#A2AB34]"
+                          />
+                          <div className="flex justify-between text-[10px] text-stone-400">
+                            <span>ছবি #{editingGalIdx + 1} Zoom</span>
+                            <span>
+                              {clampNum(activeGalStyle.zoom, 50, 220, 100)}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="50"
+                            max="220"
+                            value={clampNum(activeGalStyle.zoom, 50, 220, 100)}
                             onChange={(e) =>
                               applyStyle(
                                 activeGalStyleKey,
@@ -2157,6 +2569,7 @@ export default function LandingView({
                 {/* সিলেক্টেড এলিমেন্টের সম্পূর্ণ Text, Box, Border, Shadow ও Photoshop Filter কন্ট্রোল */}
                 {activeTool !== "addBox" &&
                   activeTool !== "gallery" &&
+                  activeTool !== "price" &&
                   activeTool !== "discount" &&
                   activeTool !== "payment" &&
                   currentSelected && (
@@ -2217,6 +2630,47 @@ export default function LandingView({
                             }
                             className="w-full bg-stone-900 border border-stone-700 rounded px-2.5 py-1.5 text-white"
                           />
+                        </div>
+                      )}
+
+                      {/* প্রতিটি বক্সে নতুন লেখা / পয়েন্ট যোগ করার অপশন */}
+                      {(currentSelected.type === "box" ||
+                        currentSelected.type === "customBlock") && (
+                        <div className="space-y-1.5 bg-stone-900 border border-emerald-800/60 rounded p-2">
+                          <div className="text-[10px] font-bold text-emerald-300">
+                            + এই বক্সে নতুন লেখা / পয়েন্ট যোগ করুন
+                          </div>
+                          <input
+                            type="text"
+                            value={extraAppendedText}
+                            onChange={(e) =>
+                              setExtraAppendedText(e.target.value)
+                            }
+                            placeholder="নতুন শিরোনাম / পয়েন্ট লিখুন"
+                            className="w-full bg-stone-950 border border-stone-700 rounded px-2 py-1 text-white"
+                          />
+                          <textarea
+                            rows={2}
+                            value={extraAppendedDesc}
+                            onChange={(e) =>
+                              setExtraAppendedDesc(e.target.value)
+                            }
+                            placeholder="বিস্তারিত বিবরণ লিখুন (ঐচ্ছিক)"
+                            className="w-full bg-stone-950 border border-stone-700 rounded px-2 py-1 text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAppendTextToSelectedBox(currentSelected)
+                            }
+                            style={{
+                              backgroundColor: "#A2AB34",
+                              color: "#1E1B24",
+                            }}
+                            className="w-full py-1.5 rounded font-extrabold text-[11px] cursor-pointer"
+                          >
+                            + বক্সে নতুন লেখা যোগ করুন
+                          </button>
                         </div>
                       )}
 
@@ -2285,13 +2739,30 @@ export default function LandingView({
                               className="hidden"
                               onChange={async (e) => {
                                 const file = e.target.files?.[0];
-                                if (!file || !currentSelected.contentPath) return;
+                                if (!file) return;
                                 const compressed =
                                   await compressImageToSafeDataUrl(file);
-                                applyContentChange(
-                                  currentSelected.contentPath,
-                                  compressed
-                                );
+                                if (
+                                  currentSelected.customId &&
+                                  !currentSelected.contentPath
+                                ) {
+                                  const id = currentSelected.customId;
+                                  setLocalCustomBlocks((prev) =>
+                                    prev.map((b) =>
+                                      b.id === id
+                                        ? { ...b, imageUrl: compressed }
+                                        : b
+                                    )
+                                  );
+                                  onUpdateCustomBlock?.(id, {
+                                    imageUrl: compressed,
+                                  });
+                                } else if (currentSelected.contentPath) {
+                                  applyContentChange(
+                                    currentSelected.contentPath,
+                                    compressed
+                                  );
+                                }
                                 e.target.value = "";
                               }}
                             />
@@ -2324,17 +2795,17 @@ export default function LandingView({
                               <div className="flex justify-between text-[10px] text-stone-400 mb-1">
                                 <span>Zoom</span>
                                 <span>
-                                  {clampNum(activeStyle.zoom, 50, 200, 100)}%
+                                  {clampNum(activeStyle.zoom, 50, 220, 100)}%
                                 </span>
                               </div>
                               <input
                                 type="range"
                                 min="50"
-                                max="200"
+                                max="220"
                                 value={clampNum(
                                   activeStyle.zoom,
                                   50,
-                                  200,
+                                  220,
                                   100
                                 )}
                                 onChange={(e) =>
@@ -2792,14 +3263,14 @@ export default function LandingView({
 
                       <div>
                         <div className="flex justify-between mb-1">
-                          <span>Height (Max 650px)</span>
+                          <span>Height (Max 900px)</span>
                           <span>{activeStyle.height || "Auto"}px</span>
                         </div>
                         <input
                           type="range"
                           min="32"
-                          max="650"
-                          value={clampNum(activeStyle.height, 32, 650, 90)}
+                          max="900"
+                          value={clampNum(activeStyle.height, 32, 900, 90)}
                           onChange={(e) =>
                             applyResize(
                               currentSelected.styleKey,
@@ -2899,28 +3370,39 @@ export default function LandingView({
             } items-center`}
           >
             <div className={isMobileSim ? "space-y-3 min-w-0" : "min-w-0"}>
-              <span
-                onClick={(e) =>
-                  handleSelect(e, {
-                    id: "hero-badge",
-                    label: "Hero Badge",
-                    type: "text",
-                    contentPath: "hero.badge",
-                    styleKey: "heroBadge",
-                  })
-                }
-                style={{
-                  ...getTextCss("heroBadge", 12, textColor),
-                  backgroundColor:
-                    getElStyle("heroBadge").backgroundColor || "#F3EFE6",
-                  borderRadius: `${globalBorderRadius}px`,
-                }}
-                className={`inline-block px-3.5 py-1 font-medium border border-black/10 ${
-                  isMobileSim ? "mb-1" : "mb-6"
-                } ${highlightClass("hero-badge")}`}
+              {/* উপরের Hero Badge মাঝখানে */}
+              <div
+                className={`w-full flex ${
+                  (getElStyle("heroBadge").textAlign || "center") === "left"
+                    ? "justify-start"
+                    : (getElStyle("heroBadge").textAlign || "center") === "right"
+                    ? "justify-end"
+                    : "justify-center"
+                } ${isMobileSim ? "mb-1" : "mb-6"}`}
               >
-                {heroBadge}
-              </span>
+                <span
+                  onClick={(e) =>
+                    handleSelect(e, {
+                      id: "hero-badge",
+                      label: "Hero Badge",
+                      type: "text",
+                      contentPath: "hero.badge",
+                      styleKey: "heroBadge",
+                    })
+                  }
+                  style={{
+                    ...getTextCss("heroBadge", 12, textColor, "center"),
+                    backgroundColor:
+                      getElStyle("heroBadge").backgroundColor || "#F3EFE6",
+                    borderRadius: `${globalBorderRadius}px`,
+                  }}
+                  className={`inline-block px-3.5 py-1 font-medium border border-black/10 ${highlightClass(
+                    "hero-badge"
+                  )}`}
+                >
+                  {heroBadge}
+                </span>
+              </div>
 
               <h1
                 onClick={(e) =>
@@ -3312,6 +3794,7 @@ export default function LandingView({
                       >
                         {getFieldValue(`features.${i}.subtitle`, feature.subtitle)}
                       </p>
+                      {renderExtraBoxNotes(cardKey, st.color || "#FFFFFF")}
                       {isEditMode && (
                         <div
                           onMouseDown={(e) => handleDragResize(e, cardKey, w, h)}
@@ -3329,7 +3812,7 @@ export default function LandingView({
           </section>
         )}
 
-        {/* Photo Gallery — ব্যানার এপাশ থেকে ওপাশ পুরো ফ্রেম জুড়ে, প্রতিটি ছবির ফ্রেম ভেতরে ফিট */}
+        {/* Photo Gallery */}
         {galleryImages.length > 0 && (
           <section
             id="gallery"
@@ -3391,11 +3874,11 @@ export default function LandingView({
                 height:
                   galleryBannerHeight <= 0
                     ? "auto"
-                    : `${Math.max(galleryCardSize + 36, galleryBannerHeight)}px`,
+                    : `${Math.max(galleryCardSize + 40, galleryBannerHeight)}px`,
                 minHeight:
                   galleryBannerHeight <= 0
-                    ? `${galleryCardSize + 32}px`
-                    : `${Math.max(galleryCardSize + 36, galleryBannerHeight)}px`,
+                    ? `${galleryCardSize + 36}px`
+                    : `${Math.max(galleryCardSize + 40, galleryBannerHeight)}px`,
               }}
               className={`relative w-full flex flex-col justify-center overflow-hidden ${
                 galleryBannerHeight <= 0
@@ -3411,10 +3894,10 @@ export default function LandingView({
                   const perItemSize = clampNum(
                     itemSt.size,
                     50,
-                    Math.min(340, Math.max(120, galleryBannerHeight - 28)),
+                    600,
                     galleryCardSize
                   );
-                  const perItemZoom = clampNum(itemSt.zoom, 50, 200, 100);
+                  const perItemZoom = clampNum(itemSt.zoom, 50, 220, 100);
                   return (
                     <div
                       key={`${img.url}-${idx}`}
@@ -3487,6 +3970,8 @@ export default function LandingView({
             </div>
           </section>
         )}
+
+        {renderCustomBlocks("afterGallery")}
 
         {/* Details Section */}
         <section
@@ -3573,7 +4058,7 @@ export default function LandingView({
                         isMobileSim ? 13.5 : 17,
                         getElStyle("detailsBox").color || mutedTextColor
                       )}
-                      className={`mb-4 leading-relaxed ${highlightClass(
+                      className={`mb-4 leading-relaxed whitespace-pre-line ${highlightClass(
                         "details-text-1"
                       )}`}
                     >
@@ -3616,6 +4101,11 @@ export default function LandingView({
                     </div>
                   )}
 
+                  {renderExtraBoxNotes(
+                    "detailsBox",
+                    getElStyle("detailsBox").color || mutedTextColor
+                  )}
+
                   {isEditMode && (
                     <div
                       onMouseDown={(e) =>
@@ -3636,6 +4126,8 @@ export default function LandingView({
               const rbw = boxRSt.width || 520;
               const rbh = boxRSt.height || 420;
               const btnSt = getElStyle("detailsOrderBtn");
+              const btnW = btnSt.width || 180;
+              const btnH = btnSt.height || 46;
               return (
                 <div
                   onClick={(e) =>
@@ -3683,7 +4175,7 @@ export default function LandingView({
                     )}
 
                     <div className="space-y-4">
-                      {details.points?.map((point: any, i: number) => (
+                      {activeDetailsPoints.map((point: any, i: number) => (
                         <div key={i} className="flex gap-3 min-w-0">
                           <div className="mt-1 shrink-0">
                             <DynamicIcon
@@ -3770,6 +4262,14 @@ export default function LandingView({
                         fontFamily: btnSt.fontFamily || "inherit",
                         fontWeight: btnSt.bold ? 800 : 700,
                         fontStyle: btnSt.italic ? "italic" : "normal",
+                        width:
+                          btnSt.width && !isMobileSim
+                            ? `${clampNum(btnSt.width, 80, 420, 180)}px`
+                            : undefined,
+                        height:
+                          btnSt.height && !isMobileSim
+                            ? `${clampNum(btnSt.height, 36, 120, 46)}px`
+                            : undefined,
                         borderRadius: `${
                           btnSt.borderRadius ??
                           Math.max(10, globalBorderRadius * 0.5)
@@ -3781,6 +4281,17 @@ export default function LandingView({
                       )}`}
                     >
                       <span>অর্ডার করতে চাই</span>
+                      {isEditMode && (
+                        <div
+                          onMouseDown={(e) =>
+                            handleDragResize(e, "detailsOrderBtn", btnW, btnH)
+                          }
+                          title="টেনে বাটন বড়-ছোট করুন"
+                          className="w-4 h-4 rounded bg-black/35 text-white text-[10px] flex items-center justify-center cursor-nwse-resize select-none"
+                        >
+                          ↘
+                        </div>
+                      )}
                     </a>
                   </div>
 
@@ -3851,6 +4362,12 @@ export default function LandingView({
                   const wBoxSt = getElStyle("whyUsBox");
                   const wbw = wBoxSt.width || 520;
                   const wbh = wBoxSt.height || 360;
+                  const wOrderSt = getElStyle("whyOrderBtn");
+                  const wOrderW = wOrderSt.width || 175;
+                  const wOrderH = wOrderSt.height || 44;
+                  const wWaSt = getElStyle("whyWaBtn");
+                  const wWaW = wWaSt.width || 245;
+                  const wWaH = wWaSt.height || 44;
                   return (
                     <div
                       onClick={(e) =>
@@ -3895,7 +4412,7 @@ export default function LandingView({
                       </h2>
 
                       <div className="space-y-3.5">
-                        {whyUs.points?.map((point: any, i: number) => (
+                        {activeWhyUsPoints.map((point: any, i: number) => (
                           <div key={i} className="flex gap-3 min-w-0">
                             <DynamicIcon
                               name="CheckSquare"
@@ -3939,21 +4456,62 @@ export default function LandingView({
                       <div className="mt-6 flex flex-wrap gap-2.5">
                         <a
                           href={isEditMode ? undefined : "#order"}
+                          onClick={(e) =>
+                            handleSelect(e, {
+                              id: "why-order-btn",
+                              label: "Why Us অর্ডার বাটন",
+                              type: "button",
+                              styleKey: "whyOrderBtn",
+                            })
+                          }
                           style={{
-                            backgroundColor: accentColor,
-                            color: "#FFFFFF",
-                            borderRadius: `${Math.max(
-                              10,
-                              globalBorderRadius * 0.55
+                            backgroundColor:
+                              wOrderSt.backgroundColor || accentColor,
+                            color: wOrderSt.color || "#FFFFFF",
+                            fontSize: `${clampNum(
+                              wOrderSt.fontSize,
+                              11,
+                              28,
+                              14
                             )}px`,
+                            width:
+                              wOrderSt.width && !isMobileSim
+                                ? `${clampNum(wOrderSt.width, 80, 420, 175)}px`
+                                : undefined,
+                            height:
+                              wOrderSt.height && !isMobileSim
+                                ? `${clampNum(wOrderSt.height, 36, 120, 44)}px`
+                                : undefined,
+                            borderRadius: `${
+                              wOrderSt.borderRadius ??
+                              Math.max(10, globalBorderRadius * 0.55)
+                            }px`,
                           }}
-                          className="hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-2 text-xs sm:text-sm max-w-full"
+                          className={`hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm max-w-full cursor-pointer relative ${highlightClass(
+                            "why-order-btn"
+                          )}`}
                         >
                           <DynamicIcon
                             name="ShoppingCart"
                             className="w-4 h-4 shrink-0"
                           />
                           <span>অর্ডার করতে চাই</span>
+                          {isEditMode && (
+                            <div
+                              onMouseDown={(e) =>
+                                handleDragResize(
+                                  e,
+                                  "whyOrderBtn",
+                                  wOrderW,
+                                  wOrderH
+                                )
+                              }
+                              title="টেনে বাটন বড়-ছোট করুন"
+                              className="w-4 h-4 rounded bg-black/35 text-white text-[10px] flex items-center justify-center cursor-nwse-resize select-none"
+                            >
+                              ↘
+                            </div>
+                          )}
                         </a>
                         <a
                           href={
@@ -3965,13 +4523,40 @@ export default function LandingView({
                           }
                           target={isEditMode ? undefined : "_blank"}
                           rel={isEditMode ? undefined : "noreferrer"}
+                          onClick={(e) =>
+                            handleSelect(e, {
+                              id: "why-wa-btn",
+                              label: "Why Us WhatsApp বাটন",
+                              type: "button",
+                              styleKey: "whyWaBtn",
+                            })
+                          }
                           style={{
-                            borderRadius: `${Math.max(
-                              10,
-                              globalBorderRadius * 0.55
+                            backgroundColor:
+                              wWaSt.backgroundColor || "#2E8B57",
+                            color: wWaSt.color || "#FFFFFF",
+                            fontSize: `${clampNum(
+                              wWaSt.fontSize,
+                              11,
+                              28,
+                              14
                             )}px`,
+                            width:
+                              wWaSt.width && !isMobileSim
+                                ? `${clampNum(wWaSt.width, 100, 460, 245)}px`
+                                : undefined,
+                            height:
+                              wWaSt.height && !isMobileSim
+                                ? `${clampNum(wWaSt.height, 36, 120, 44)}px`
+                                : undefined,
+                            borderRadius: `${
+                              wWaSt.borderRadius ??
+                              Math.max(10, globalBorderRadius * 0.55)
+                            }px`,
                           }}
-                          className="bg-[#2E8B57] hover:bg-[#246B43] text-white px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-2 text-xs sm:text-sm cursor-pointer max-w-full"
+                          className={`hover:opacity-95 text-white px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer max-w-full relative ${highlightClass(
+                            "why-wa-btn"
+                          )}`}
                         >
                           <DynamicIcon
                             name="MessageCircle"
@@ -3980,6 +4565,17 @@ export default function LandingView({
                           <span className="truncate">
                             WhatsApp অর্ডার ({whatsappDisplay})
                           </span>
+                          {isEditMode && (
+                            <div
+                              onMouseDown={(e) =>
+                                handleDragResize(e, "whyWaBtn", wWaW, wWaH)
+                              }
+                              title="টেনে বাটন বড়-ছোট করুন"
+                              className="w-4 h-4 rounded bg-black/35 text-white text-[10px] flex items-center justify-center cursor-nwse-resize select-none"
+                            >
+                              ↘
+                            </div>
+                          )}
                         </a>
                       </div>
 
@@ -4020,6 +4616,9 @@ export default function LandingView({
                 const tBoxSt = getElStyle("targetBox");
                 const tbw = tBoxSt.width || 520;
                 const tbh = tBoxSt.height || 340;
+                const tBtnSt = getElStyle("targetOrderBtn");
+                const tBtnW = tBtnSt.width || 180;
+                const tBtnH = tBtnSt.height || 44;
                 return (
                   <div
                     onClick={(e) =>
@@ -4066,7 +4665,7 @@ export default function LandingView({
                       )}
                     </h2>
                     <div className="space-y-3 mb-5">
-                      {targetAudience.points?.map((point: any, i: number) => (
+                      {activeTargetPoints.map((point: any, i: number) => (
                         <div key={i} className="flex gap-3 items-start min-w-0">
                           <DynamicIcon
                             name="CheckCheck"
@@ -4111,21 +4710,56 @@ export default function LandingView({
                     </div>
                     <a
                       href={isEditMode ? undefined : "#order"}
+                      onClick={(e) =>
+                        handleSelect(e, {
+                          id: "tgt-order-btn",
+                          label: "Target অর্ডার বাটন",
+                          type: "button",
+                          styleKey: "targetOrderBtn",
+                        })
+                      }
                       style={{
-                        backgroundColor: accentColor,
-                        color: "#FFFFFF",
-                        borderRadius: `${Math.max(
-                          10,
-                          globalBorderRadius * 0.55
-                        )}px`,
+                        backgroundColor:
+                          tBtnSt.backgroundColor || accentColor,
+                        color: tBtnSt.color || "#FFFFFF",
+                        width:
+                          tBtnSt.width && !isMobileSim
+                            ? `${clampNum(tBtnSt.width, 80, 420, 180)}px`
+                            : undefined,
+                        height:
+                          tBtnSt.height && !isMobileSim
+                            ? `${clampNum(tBtnSt.height, 36, 120, 44)}px`
+                            : undefined,
+                        borderRadius: `${
+                          tBtnSt.borderRadius ??
+                          Math.max(10, globalBorderRadius * 0.55)
+                        }px`,
                       }}
-                      className="inline-flex items-center gap-2 hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 text-xs sm:text-sm"
+                      className={`inline-flex items-center justify-center gap-2 hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 text-xs sm:text-sm cursor-pointer relative ${highlightClass(
+                        "tgt-order-btn"
+                      )}`}
                     >
                       <DynamicIcon
                         name="ShoppingCart"
                         className="w-4 h-4 shrink-0"
                       />
                       <span>অর্ডার করতে চাই</span>
+                      {isEditMode && (
+                        <div
+                          onMouseDown={(e) =>
+                            handleDragResize(
+                              e,
+                              "targetOrderBtn",
+                              tBtnW,
+                              tBtnH
+                            )
+                          }
+                          title="টেনে বাটন বড়-ছোট করুন"
+                          className="w-4 h-4 rounded bg-black/35 text-white text-[10px] flex items-center justify-center cursor-nwse-resize select-none"
+                        >
+                          ↘
+                        </div>
+                      )}
                     </a>
                     {isEditMode && (
                       <div
@@ -4271,29 +4905,70 @@ export default function LandingView({
                 })}
               </div>
 
-              <a
-                href={
-                  isEditMode
-                    ? undefined
-                    : `https://wa.me/${formattedWa}?text=${encodeURIComponent(
-                        "আসসালামু আলাইকুম, আমি অর্ডার করতে চাই।"
-                      )}`
-                }
-                target={isEditMode ? undefined : "_blank"}
-                rel={isEditMode ? undefined : "noreferrer"}
-                style={{
-                  borderRadius: `${Math.max(10, globalBorderRadius * 0.55)}px`,
-                }}
-                className="w-full mt-5 bg-[#2E8B57] hover:bg-[#246B43] text-white py-3.5 px-4 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer"
-              >
-                <DynamicIcon
-                  name="MessageCircle"
-                  className="w-5 h-5 shrink-0"
-                />
-                <span className="truncate">
-                  WhatsApp-এ যোগাযোগ করুন ({whatsappDisplay})
-                </span>
-              </a>
+              {(() => {
+                const pkgWaSt = getElStyle("pkgWaBtn");
+                const pkgWaW = pkgWaSt.width || 460;
+                const pkgWaH = pkgWaSt.height || 48;
+                return (
+                  <a
+                    href={
+                      isEditMode
+                        ? undefined
+                        : `https://wa.me/${formattedWa}?text=${encodeURIComponent(
+                            "আসসালামু আলাইকুম, আমি অর্ডার করতে চাই।"
+                          )}`
+                    }
+                    target={isEditMode ? undefined : "_blank"}
+                    rel={isEditMode ? undefined : "noreferrer"}
+                    onClick={(e) =>
+                      handleSelect(e, {
+                        id: "pkg-wa-btn",
+                        label: "প্যাকেজ WhatsApp বাটন",
+                        type: "button",
+                        styleKey: "pkgWaBtn",
+                      })
+                    }
+                    style={{
+                      backgroundColor: pkgWaSt.backgroundColor || "#2E8B57",
+                      color: pkgWaSt.color || "#FFFFFF",
+                      width:
+                        pkgWaSt.width && !isMobileSim
+                          ? `${clampNum(pkgWaSt.width, 160, 560, 460)}px`
+                          : "100%",
+                      height:
+                        pkgWaSt.height && !isMobileSim
+                          ? `${clampNum(pkgWaSt.height, 36, 120, 48)}px`
+                          : undefined,
+                      borderRadius: `${
+                        pkgWaSt.borderRadius ??
+                        Math.max(10, globalBorderRadius * 0.55)
+                      }px`,
+                    }}
+                    className={`w-full mt-5 hover:opacity-95 text-white py-3.5 px-4 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer relative ${highlightClass(
+                      "pkg-wa-btn"
+                    )}`}
+                  >
+                    <DynamicIcon
+                      name="MessageCircle"
+                      className="w-5 h-5 shrink-0"
+                    />
+                    <span className="truncate">
+                      WhatsApp-এ যোগাযোগ করুন ({whatsappDisplay})
+                    </span>
+                    {isEditMode && (
+                      <div
+                        onMouseDown={(e) =>
+                          handleDragResize(e, "pkgWaBtn", pkgWaW, pkgWaH)
+                        }
+                        title="টেনে বাটন বড়-ছোট করুন"
+                        className="w-4 h-4 rounded bg-black/35 text-white text-[10px] flex items-center justify-center cursor-nwse-resize select-none"
+                      >
+                        ↘
+                      </div>
+                    )}
+                  </a>
+                );
+              })()}
             </div>
 
             <div className="w-full min-w-0">
@@ -4340,21 +5015,32 @@ export default function LandingView({
 
         {/* Checkout / Order Form Section */}
         <section id="order" className="container mx-auto px-3.5 max-w-5xl pb-12">
-          {discountEnabled && computedDiscountAmount > 0 && (
+          {(discountEnabled && computedDiscountAmount > 0) || freeShipping ? (
             <div className="mb-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-emerald-900">
-              <span>
-                🏷️ {discountLabel || "বিশেষ ছাড়"} চালু আছে (
-                {discountType === "percent"
-                  ? `${discountValue}%`
-                  : `${discountValue}৳`}{" "}
-                ছাড়)
-              </span>
               <div className="flex flex-wrap items-center gap-2">
-                <span>
-                  আসল মূল্য{" "}
-                  <span className="line-through">{baseProductPrice}৳</span> →
-                  ডিসকাউন্ট মূল্য <strong>{computedDiscountedPrice}৳</strong>
-                </span>
+                {discountEnabled && computedDiscountAmount > 0 && (
+                  <span>
+                    🏷️ {discountLabel || "বিশেষ ছাড়"} চালু আছে (
+                    {discountType === "percent"
+                      ? `${discountValue}%`
+                      : `${discountValue}৳`}{" "}
+                    ছাড়)
+                  </span>
+                )}
+                {freeShipping && (
+                  <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[11px]">
+                    🚚 ফ্রি ডেলিভারি চালু
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {discountEnabled && computedDiscountAmount > 0 && (
+                  <span>
+                    আসল মূল্য{" "}
+                    <span className="line-through">{baseProductPrice}৳</span> →
+                    ডিসকাউন্ট মূল্য <strong>{computedDiscountedPrice}৳</strong>
+                  </span>
+                )}
                 {isEditMode && (
                   <button
                     type="button"
@@ -4366,7 +5052,7 @@ export default function LandingView({
                 )}
               </div>
             </div>
-          )}
+          ) : null}
 
           <div
             onClick={(e) =>
