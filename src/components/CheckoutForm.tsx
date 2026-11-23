@@ -26,14 +26,44 @@ export default function CheckoutForm({
   const [trackedOrders, setTrackedOrders] = useState<any[] | null>(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
 
-  const ADMIN_WHATSAPP = "8801639193531";
+  const ADMIN_WHATSAPP = pricing?.whatsappNumber || "8801639193531";
 
   const districts = Object.keys(bdLocations);
   const availableThanas = bdLocations[district] || [];
 
-  const subtotal = pricing.productPrice * quantity;
-  const shippingFee = shippingArea === "inside" ? pricing.shippingInside : pricing.shippingOutside;
+  // আসল মূল্য ও ডিসকাউন্ট মূল্য নির্ধারণ
+  const originalUnitPrice = Number(pricing?.originalPrice ?? pricing?.productPrice ?? 590);
+  const hasDiscount =
+    Boolean(pricing?.discountEnabled) &&
+    Number(pricing?.discountedPrice ?? pricing?.discountPrice ?? originalUnitPrice) <
+      originalUnitPrice;
+
+  const effectiveUnitPrice = hasDiscount
+    ? Number(pricing?.discountedPrice ?? pricing?.discountPrice ?? 490)
+    : originalUnitPrice;
+
+  const discountPercent =
+    originalUnitPrice > 0
+      ? Math.max(
+          1,
+          Math.round(((originalUnitPrice - effectiveUnitPrice) / originalUnitPrice) * 100)
+        )
+      : 0;
+
+  const subtotal = effectiveUnitPrice * quantity;
+  const originalSubtotal = originalUnitPrice * quantity;
+  const shippingFee =
+    shippingArea === "inside" ? pricing.shippingInside : pricing.shippingOutside;
   const total = subtotal + shippingFee;
+
+  // অর্ডার নম্বর ৩১০ থেকে শুরু করার ফাংশন
+  const formatOrderSerial = (rawId: any) => {
+    const num = Number(rawId);
+    if (!Number.isNaN(num) && Number.isFinite(num)) {
+      return num < 310 ? num + 309 : num;
+    }
+    return rawId;
+  };
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -56,18 +86,25 @@ export default function CheckoutForm({
     });
 
     if (result.success && result.order) {
-      setSubmittedOrder(result.order);
+      const displaySerial = formatOrderSerial(result.order.id);
+      setSubmittedOrder({ ...result.order, displaySerial });
 
       const shippingText =
         shippingArea === "inside"
           ? `ঢাকার ভিতরে (${shippingFee}৳)`
           : `ঢাকার বাহিরে (${shippingFee}৳)`;
-      const message = `🛒 *নতুন অর্ডার এসেছে!* (Order #${result.order.id})
+
+      const priceLine = hasDiscount
+        ? `${effectiveUnitPrice}৳ (Discount ${discountPercent}% off from ${originalUnitPrice}৳)`
+        : `${effectiveUnitPrice}৳`;
+
+      const message = `🛒 *নতুন অর্ডার এসেছে!* (Order #${displaySerial})
       
 *নাম:* ${name}
 *ফোন:* ${phone}
 *ঠিকানা:* ${fullAddress}
-*প্রোডাক্ট:* ${pricing.productName || "খাঁটি খেজুরের গুড়"} (× ${quantity})
+*প্রোডাক্ট:* ${pricing.productName || "Hanging Hand Soap"} (× ${quantity})
+*একক মূল্য:* ${priceLine}
 *ডেলিভারি:* ${shippingText}
 *সর্বমোট বিল:* ${total}৳
 *স্ট্যাটাস:* Pending`;
@@ -109,8 +146,11 @@ export default function CheckoutForm({
             ধন্যবাদ, {submittedOrder.name}!
           </h3>
           <p className="text-gray-700 text-sm mb-3">
-            অর্ডার আইডি: <strong>#{submittedOrder.id}</strong> | পরিমাণ:{" "}
-            <strong>{submittedOrder.quantity || 1}টি</strong>
+            অর্ডার আইডি:{" "}
+            <strong>
+              #{submittedOrder.displaySerial ?? formatOrderSerial(submittedOrder.id)}
+            </strong>{" "}
+            | পরিমাণ: <strong>{submittedOrder.quantity || 1}টি</strong>
           </p>
           <div className="inline-block bg-white px-4 py-2.5 rounded-lg border border-gray-200 mb-4 text-xs">
             <span className="text-gray-600 mr-1">স্ট্যাটাস:</span>
@@ -142,7 +182,7 @@ export default function CheckoutForm({
               অর্ডার করতে নিচের ফর্মটি সঠিক ভাবে পুরন করুন।
             </h2>
 
-            {/* মোবাইল ভিউতে সবসময় ১ কলাম (একটার নিচে আরেকটা), ডেস্কটপে ২ কলাম */}
+            {/* মোবাইল ভিউতে সবসময় ১ কলাম (একটার নিচে আরেকটা), ডেস্কটপে ২ কলাম */}
             <div
               className={`grid grid-cols-1 ${
                 isMobile ? "gap-6" : "md:grid-cols-2 gap-10"
@@ -294,7 +334,7 @@ export default function CheckoutForm({
                 </div>
               </div>
 
-              {/* সেকশন ২: Your order (মোবাইলে Billing details-এর ঠিক নিচে পুরো প্রস্থ জুড়ে) */}
+              {/* সেকশন ২: Your order (মোবাইলে Billing details-এর ঠিক নিচে পুরো প্রস্থ জুড়ে) */}
               <div className="flex flex-col w-full">
                 <h3 className="text-[17px] font-bold text-[#222222] mb-3">
                   Your order
@@ -306,18 +346,56 @@ export default function CheckoutForm({
                     <span>Subtotal</span>
                   </div>
 
-                  {/* প্রোডাক্ট ও পরিমাণ: একটার নিচে আরেকটা পরিষ্কার লাইনে */}
-                  <div className="py-2 border-b border-gray-200 flex flex-col gap-2.5 text-[14px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-800 font-semibold">
-                        {pricing.productName || "খাঁটি খেজুরের গুড়"}
-                      </span>
-                      <span className="font-bold text-gray-900 shrink-0">
-                        {subtotal}৳
-                      </span>
+                  {/* প্রোডাক্ট, ডিসকাউন্ট হাইলাইট লাইন + ১ অক্ষরের স্টিকার ও পরিমাণ */}
+                  <div className="py-2.5 border-b border-gray-200 flex flex-col gap-2 text-[14px]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-gray-800 font-semibold">
+                          {pricing.productName || "Hanging Hand Soap"}
+                        </span>
+
+                        {hasDiscount && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center bg-[#FEF08A] text-stone-950 font-black text-base md:text-lg px-2.5 py-0.5 rounded-md border border-amber-400 shadow-xs tracking-wide">
+                              Discount — {discountPercent}%
+                            </span>
+                            <span className="inline-flex items-center justify-center w-6 h-6 -rotate-3 bg-rose-600 text-white text-xs font-black rounded-full shadow-xs border border-rose-700 shrink-0">
+                              %
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="text-xs text-gray-600">
+                          {hasDiscount ? (
+                            <>
+                              <span className="line-through text-gray-400 mr-1.5">
+                                {originalUnitPrice}৳
+                              </span>
+                              <span className="font-bold text-emerald-700 text-sm">
+                                {effectiveUnitPrice}৳
+                              </span>
+                            </>
+                          ) : (
+                            <span className="font-semibold text-gray-800">
+                              {effectiveUnitPrice}৳
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        {hasDiscount && (
+                          <span className="line-through text-xs text-gray-400 mr-1.5">
+                            {originalSubtotal}৳
+                          </span>
+                        )}
+                        <span className="font-bold text-gray-900">
+                          {subtotal}৳
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between pt-1">
                       <div className="inline-flex items-center border border-gray-300 rounded bg-gray-50">
                         <button
                           type="button"
@@ -436,7 +514,7 @@ export default function CheckoutForm({
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-gray-800">
-                        Order #{order.id}
+                        Order #{formatOrderSerial(order.id)}
                       </span>
                       <span className="font-bold text-gray-900">
                         {order.total}৳

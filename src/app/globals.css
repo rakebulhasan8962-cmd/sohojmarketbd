@@ -44,3 +44,8 @@ html {
     font-size: 17px; /* ডিফল্ট 16px থাকে, 17px বা 18px দিলে সব লেখা সুন্দর বড় দেখাবে */
   }
 }
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}

@@ -10,8 +10,8 @@ const hindSiliguri = Hind_Siliguri({
 });
 
 export const metadata: Metadata = {
-  title: "Gramer Khejur Gur - খাঁটি খেজুরের গুড়",
-  description: "সাধারণ গুড় নয়। শীতের সকালের ঘ্রাণ আর সুবাস নিয়ে সরাসরি গাছ থেকে সংগ্রহ করা রসে তৈরি খাঁটি খেজুরের গুড়।",
+  title: "Grape Cluster Hanging Soap",
+  description: "আপনার বাথরুমেও যোগ করবে সৌন্দর্য।।",
 };
 
 export default function RootLayout({

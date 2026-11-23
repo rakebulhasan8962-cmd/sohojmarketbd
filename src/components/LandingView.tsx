@@ -4234,7 +4234,7 @@ export default function LandingView({
                   className="w-5 h-5 shrink-0"
                 />
                 <span>
-                  WhatsApp-এ যোগাযোগ ও অর্ডার করুন ({whatsappDisplay})
+                  WhatsApp-এ যোগাযোগ করুন ({whatsappDisplay})
                 </span>
               </a>
             </div>
