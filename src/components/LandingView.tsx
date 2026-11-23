@@ -186,6 +186,7 @@ export default function LandingView({
   const [localCustomBlocks, setLocalCustomBlocks] = useState<CustomBlockItem[]>(
     []
   );
+  const [deletedBlockIds, setDeletedBlockIds] = useState<string[]>([]);
   const [localOverrides, setLocalOverrides] = useState<Record<string, any>>(
     {}
   );
@@ -406,6 +407,19 @@ export default function LandingView({
   const applyContentChange = (path: string, value: any) => {
     setLocalOverrides((prev) => ({ ...prev, [path]: value }));
     onUpdateContent?.(path, value);
+  };
+
+  const handleDeleteCustomBlock = (blkId: string) => {
+    setLocalCustomBlocks((prev) => prev.filter((b) => b.id !== blkId));
+    setDeletedBlockIds((prev) => (prev.includes(blkId) ? prev : [...prev, blkId]));
+    if (activeEl?.customId === blkId) {
+      setActiveEl(null);
+    }
+  };
+
+  const handleDeleteDiscount = () => {
+    applyContentChange("pricing.discountEnabled", false);
+    applyContentChange("pricing.discountValue", 0);
   };
 
   const buildPhotoshopFilter = (st: any) => {
@@ -755,7 +769,7 @@ export default function LandingView({
   const allCustomBlocks: CustomBlockItem[] = [
     ...(Array.isArray(content?.customBlocks) ? content.customBlocks : []),
     ...localCustomBlocks,
-  ];
+  ].filter((b) => !deletedBlockIds.includes(b.id));
 
   const baseProductPrice = clampNum(
     getFieldValue("pricing.productPrice", content?.pricing?.productPrice ?? 1250),
@@ -960,7 +974,7 @@ export default function LandingView({
     const item: GalleryItem = {
       url,
       caption:
-        newGalCaption.trim() || `খাঁটি খেজুরের গুড় #${galleryImages.length + 1}`,
+        newGalCaption.trim() || `Hanging Hand Soap #${galleryImages.length + 1}`,
     };
     const next = [...galleryImages];
     if (newGalIndex === "end") {
@@ -1081,24 +1095,33 @@ export default function LandingView({
                 </div>
 
                 {isEditMode && blk.id && (
-                  <label
+                  <div
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-2 inline-flex items-center gap-1 bg-stone-900/85 hover:bg-stone-900 text-amber-300 text-[10px] font-bold px-2.5 py-1 rounded cursor-pointer"
+                    className="mt-2 flex flex-wrap items-center gap-2"
                   >
-                    <span>+ ছবি যুক্ত / বদলান</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0];
-                        if (f && blk.id) {
-                          await attachPhotoToCustomBlock(blk.id, f);
-                        }
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
+                    <label className="inline-flex items-center gap-1 bg-stone-900/85 hover:bg-stone-900 text-amber-300 text-[10px] font-bold px-2.5 py-1 rounded cursor-pointer">
+                      <span>+ ছবি যুক্ত / বদলান</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (f && blk.id) {
+                            await attachPhotoToCustomBlock(blk.id, f);
+                          }
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCustomBlock(blk.id!)}
+                      className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
 
                 {isEditMode && (
@@ -1436,26 +1459,35 @@ export default function LandingView({
                 {/* আসল মূল্য ও Discount কন্ট্রোল প্যানেল */}
                 {activeTool === "discount" && (
                   <div className="space-y-2.5 bg-stone-950/80 p-2.5 rounded-lg border border-stone-800">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-[#A2AB34]">
                         আসল মূল্য ও Discount সেটিংস
                       </span>
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={discountEnabled}
-                          onChange={(e) =>
-                            applyContentChange(
-                              "pricing.discountEnabled",
-                              e.target.checked
-                            )
-                          }
-                          className="accent-[#A2AB34] w-4 h-4"
-                        />
-                        <span className="text-[11px] font-bold text-emerald-300">
-                          {discountEnabled ? "চালু" : "বন্ধ"}
-                        </span>
-                      </label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleDeleteDiscount}
+                          className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={discountEnabled}
+                            onChange={(e) =>
+                              applyContentChange(
+                                "pricing.discountEnabled",
+                                e.target.checked
+                              )
+                            }
+                            className="accent-[#A2AB34] w-4 h-4"
+                          />
+                          <span className="text-[11px] font-bold text-emerald-300">
+                            {discountEnabled ? "চালু" : "বন্ধ"}
+                          </span>
+                        </label>
+                      </div>
                     </div>
 
                     <div>
@@ -1765,6 +1797,33 @@ export default function LandingView({
                     >
                       + ওয়েবপেজে যোগ করুন
                     </button>
+
+                    {allCustomBlocks.length > 0 && (
+                      <div className="border-t border-stone-800 pt-2 space-y-1.5">
+                        <div className="text-[10px] font-bold text-stone-300">
+                          তৈরিকৃত বক্সগুলো ম্যানেজ করুন:
+                        </div>
+                        {allCustomBlocks.map((blk, idx) => (
+                          <div
+                            key={blk.id || idx}
+                            className="flex items-center justify-between gap-2 bg-stone-900 border border-stone-800 rounded px-2 py-1 text-[10px]"
+                          >
+                            <span className="truncate text-stone-200 font-semibold">
+                              {blk.title}
+                            </span>
+                            {blk.id && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCustomBlock(blk.id!)}
+                                className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white font-bold shrink-0 cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1908,9 +1967,9 @@ export default function LandingView({
                               onClick={() => handleRemoveGalleryItem(idx)}
                               disabled={galleryImages.length <= 1}
                               title="মুছে ফেলুন"
-                              className="px-1.5 py-0.5 rounded bg-rose-900/80 text-rose-200 disabled:opacity-30 cursor-pointer"
+                              className="px-1.5 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-30 cursor-pointer"
                             >
-                              ✕
+                              Delete
                             </button>
                           </div>
                         </div>
@@ -2030,25 +2089,43 @@ export default function LandingView({
                   activeTool !== "payment" &&
                   currentSelected && (
                     <div className="space-y-2.5 bg-stone-950/75 p-2.5 rounded-lg border border-stone-800">
-                      <div className="flex items-center justify-between text-[10px] text-[#A2AB34] font-bold">
-                        <span>সিলেক্টেড: {currentSelected.label}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const targetKey = scopedKey(
-                              currentSelected.styleKey
-                            );
-                            setLocalStyles((prev) => {
-                              const next = { ...prev };
-                              delete next[targetKey];
-                              return next;
-                            });
-                            onUpdateStyle?.(targetKey, "__resetAll", true);
-                          }}
-                          className="text-rose-300 hover:underline cursor-pointer"
-                        >
-                          Reset
-                        </button>
+                      <div className="flex items-center justify-between gap-1.5 text-[10px] text-[#A2AB34] font-bold">
+                        <span className="truncate">
+                          সিলেক্টেড: {currentSelected.label}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {currentSelected.type === "customBlock" &&
+                            currentSelected.customId && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteCustomBlock(
+                                    currentSelected.customId!
+                                  )
+                                }
+                                className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const targetKey = scopedKey(
+                                currentSelected.styleKey
+                              );
+                              setLocalStyles((prev) => {
+                                const next = { ...prev };
+                                delete next[targetKey];
+                                return next;
+                              });
+                              onUpdateStyle?.(targetKey, "__resetAll", true);
+                            }}
+                            className="text-rose-300 hover:underline cursor-pointer"
+                          >
+                            Reset
+                          </button>
+                        </div>
                       </div>
 
                       {currentSelected.contentPath && (
@@ -3448,7 +3525,7 @@ export default function LandingView({
                       onClick={(e) =>
                         handleSelect(e, {
                           id: "details-text-2",
-                          label: "Details দ্বিতীয় লেখা",
+                          label: "Details দ্বিতীয় লেখা",
                           type: "text",
                           contentPath: "details.text2",
                           styleKey: "detailsText2",
@@ -3525,7 +3602,7 @@ export default function LandingView({
                         onClick={(e) =>
                           handleSelect(e, {
                             id: "details-points-title",
-                            label: "Details পয়েন্ট শিরোনাম",
+                            label: "Details পয়েন্ট শিরোনাম",
                             type: "text",
                             contentPath: "details.pointsTitle",
                             styleKey: "detailsPointsTitle",
@@ -3559,7 +3636,7 @@ export default function LandingView({
                               onClick={(e) =>
                                 handleSelect(e, {
                                   id: `details-pt-title-${i}`,
-                                  label: `Details পয়েন্ট #${i + 1} শিরোনাম`,
+                                  label: `Details পয়েন্ট #${i + 1} শিরোনাম`,
                                   type: "text",
                                   contentPath: `details.points.${i}.title`,
                                   styleKey: "detailsPointTitle",
@@ -3584,7 +3661,7 @@ export default function LandingView({
                               onClick={(e) =>
                                 handleSelect(e, {
                                   id: `details-pt-desc-${i}`,
-                                  label: `Details পয়েন্ট #${i + 1} বিবরণ`,
+                                  label: `Details পয়েন্ট #${i + 1} বিবরণ`,
                                   type: "text",
                                   contentPath: `details.points.${i}.description`,
                                   styleKey: "detailsPointDesc",
@@ -3772,7 +3849,7 @@ export default function LandingView({
                               onClick={(e) =>
                                 handleSelect(e, {
                                   id: `why-pt-${i}`,
-                                  label: `Why Us পয়েন্ট #${i + 1}`,
+                                  label: `Why Us পয়েন্ট #${i + 1}`,
                                   type: "text",
                                   contentPath: `whyUs.points.${i}.title`,
                                   styleKey: "whyUsPointText",
@@ -3941,7 +4018,7 @@ export default function LandingView({
                             onClick={(e) =>
                               handleSelect(e, {
                                 id: `tgt-pt-${i}`,
-                                label: `Target পয়েন্ট #${i + 1}`,
+                                label: `Target পয়েন্ট #${i + 1}`,
                                 type: "text",
                                 contentPath: `targetAudience.points.${i}`,
                                 styleKey: "targetPoint",
@@ -4215,11 +4292,22 @@ export default function LandingView({
                   : `${discountValue}৳`}{" "}
                 ছাড়)
               </span>
-              <span>
-                আসল মূল্য{" "}
-                <span className="line-through">{baseProductPrice}৳</span> →
-                ডিসকাউন্ট মূল্য <strong>{computedDiscountedPrice}৳</strong>
-              </span>
+              <div className="flex items-center gap-3">
+                <span>
+                  আসল মূল্য{" "}
+                  <span className="line-through">{baseProductPrice}৳</span> →
+                  ডিসকাউন্ট মূল্য <strong>{computedDiscountedPrice}৳</strong>
+                </span>
+                {isEditMode && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteDiscount}
+                    className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
