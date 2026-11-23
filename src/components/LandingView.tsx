@@ -191,17 +191,28 @@ export default function LandingView({
     {}
   );
 
+  // আসল ডিভাইস মোবাইল কি না তা ডিটেক্ট করা
+  const [isRealMobile, setIsRealMobile] = useState<boolean>(false);
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsRealMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   useEffect(() => {
     setLocalOverrides({});
   }, [content]);
 
   const [tickerVisible, setTickerVisible] = useState(true);
   const [deviceView, setDeviceView] = useState<"desktop" | "mobile">("desktop");
-  const isMobileSim = isEditMode && deviceView === "mobile";
+  const isMobileSim = (isEditMode && deviceView === "mobile") || (!isEditMode && isRealMobile);
 
   const [dockPos, setDockPos] = useState<{ x: number; y: number }>({
-    x: 16,
-    y: 86,
+    x: 12,
+    y: 76,
   });
   const [activeTool, setActiveTool] = useState<
     | "select"
@@ -432,6 +443,7 @@ export default function LandingView({
     return `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturate}%) grayscale(${grayscale}%) blur(${blur}px) hue-rotate(${hueRotate}deg)`;
   };
 
+  // মোবাইলে ওভারফ্লো ঠেকাতে width-কে maxWidth: "100%" সহ সুরক্ষিত রাখা হয়েছে
   const getTextCss = (
     key: string,
     defaultSize: number,
@@ -462,7 +474,10 @@ export default function LandingView({
         st.borderRadius !== undefined
           ? `${clampNum(st.borderRadius, 0, 48, 8)}px`
           : undefined,
-      width: st.width ? `${clampNum(st.width, 60, 1150, 300)}px` : undefined,
+      width:
+        st.width && !isMobileSim
+          ? `${clampNum(st.width, 60, 1150, 300)}px`
+          : undefined,
       maxWidth: "100%",
       height: st.height ? `${clampNum(st.height, 24, 650, 60)}px` : undefined,
       overflowWrap: "anywhere",
@@ -482,9 +497,15 @@ export default function LandingView({
       backgroundColor: st.backgroundColor || defaultBg,
       color: st.color || undefined,
       textAlign: st.textAlign || undefined,
-      width: st.width ? `${clampNum(st.width, 60, 1150, 400)}px` : undefined,
+      width:
+        st.width && !isMobileSim
+          ? `${clampNum(st.width, 60, 1150, 400)}px`
+          : "100%",
       maxWidth: "100%",
-      height: st.height ? `${clampNum(st.height, 40, 650, 180)}px` : undefined,
+      minHeight:
+        st.height && !isMobileSim
+          ? `${clampNum(st.height, 40, 650, 180)}px`
+          : undefined,
       borderRadius: `${clampNum(st.borderRadius, 0, 48, defaultRadius)}px`,
       padding: `${clampNum(st.padding, 0, 48, defaultPadding)}px`,
       boxShadow: st.boxShadow ?? defaultShadow,
@@ -500,17 +521,20 @@ export default function LandingView({
     };
   };
 
-  const getImageWrapperCss = (
+  // ছবি নিজের আসল সাইজ/অ্যাসপেক্ট রেশিও অনুযায়ী ফ্রেম নেবে যাতে কোনো ছবি না কাটে
+  const getNaturalImageWrapperCss = (
     key: string,
-    defaultHeight: number,
     defaultRadius: number,
     defaultShadow: string
   ): React.CSSProperties => {
     const st = getElStyle(key);
     return {
-      width: st.width ? `${clampNum(st.width, 60, 1150, 480)}px` : "100%",
+      width:
+        st.width && !isMobileSim
+          ? `${clampNum(st.width, 80, 1150, 520)}px`
+          : "100%",
       maxWidth: "100%",
-      height: `${clampNum(st.height, 80, 650, defaultHeight)}px`,
+      height: "auto",
       borderRadius: `${clampNum(st.borderRadius, 0, 48, defaultRadius)}px`,
       boxShadow: st.boxShadow ?? defaultShadow,
       borderColor: st.borderColor || "#FFFFFF",
@@ -522,14 +546,19 @@ export default function LandingView({
     };
   };
 
-  const getImageFilterCss = (key: string): React.CSSProperties => {
+  const getNaturalImageCss = (key: string): React.CSSProperties => {
     const st = getElStyle(key);
     const zoomScale = clampNum(st.zoom, 50, 200, 100) / 100;
+    const customH = st.height ? clampNum(st.height, 80, 650, 0) : 0;
     return {
       filter: buildPhotoshopFilter(st),
       objectPosition: st.objectPosition || "center",
       transform: `scale(${zoomScale})`,
       transformOrigin: "center center",
+      width: "100%",
+      height: customH > 0 ? `${customH}px` : "auto",
+      maxHeight: isMobileSim ? "380px" : "560px",
+      display: "block",
     };
   };
 
@@ -633,16 +662,16 @@ export default function LandingView({
     const onMove = (ev: MouseEvent) => {
       if (!dragDockRef.current) return;
       const nextX = Math.max(
-        8,
+        6,
         Math.min(
-          window.innerWidth - 340,
+          window.innerWidth - 320,
           dragDockRef.current.origX + (ev.clientX - dragDockRef.current.startX)
         )
       );
       const nextY = Math.max(
-        8,
+        6,
         Math.min(
-          window.innerHeight - 120,
+          window.innerHeight - 100,
           dragDockRef.current.origY + (ev.clientY - dragDockRef.current.startY)
         )
       );
@@ -869,14 +898,14 @@ export default function LandingView({
     getElStyle("galleryCard").size,
     60,
     360,
-    isMobileSim ? 145 : 220
+    isMobileSim ? 140 : 220
   );
   const galleryBannerStyle = getElStyle("galleryBanner");
   const galleryBannerHeight = clampNum(
     galleryBannerStyle.height,
     0,
     560,
-    isMobileSim ? 235 : 330
+    isMobileSim ? 210 : 320
   );
   const galleryBannerWidth = galleryBannerStyle.width
     ? clampNum(galleryBannerStyle.width, 240, 1150, 900)
@@ -891,7 +920,7 @@ export default function LandingView({
 
     const absDiff = Math.abs(diff);
     const stepSpacing = isMobileSim
-      ? Math.max(92, galleryCardSize * 0.72)
+      ? Math.max(88, galleryCardSize * 0.7)
       : Math.max(150, galleryCardSize * 0.85);
     const translateX = diff * stepSpacing;
     const scale =
@@ -1010,12 +1039,14 @@ export default function LandingView({
     if (items.length === 0) return null;
 
     return (
-      <section className="container mx-auto px-4 max-w-6xl py-5">
+      <section className="container mx-auto px-3.5 max-w-6xl py-4">
         <div className="flex flex-wrap items-start justify-center gap-4">
           {items.map((blk, i) => {
             const stKey = `customBlock_${blk.id || i}`;
             const st = getElStyle(stKey);
-            const w = clampNum(st.width ?? blk.width, 120, 1150, 520);
+            const w = isMobileSim
+              ? 340
+              : clampNum(st.width ?? blk.width, 120, 1150, 520);
             const h = clampNum(st.height ?? blk.height, 60, 520, 160);
             const r = clampNum(
               st.borderRadius ?? blk.borderRadius,
@@ -1027,7 +1058,7 @@ export default function LandingView({
               st.padding ?? blk.padding,
               0,
               48,
-              globalBoxPadding
+              isMobileSim ? 14 : globalBoxPadding
             );
 
             return (
@@ -1048,9 +1079,9 @@ export default function LandingView({
                   borderColor: st.borderColor || "rgba(0,0,0,0.12)",
                   borderWidth: st.borderColor ? "2px" : "1px",
                   borderStyle: "solid",
-                  width: `${w}px`,
+                  width: isMobileSim ? "100%" : `${w}px`,
                   maxWidth: "100%",
-                  minHeight: `${h}px`,
+                  minHeight: isMobileSim ? undefined : `${h}px`,
                   borderRadius: `${r}px`,
                   padding: `${p}px`,
                   boxShadow: st.boxShadow ?? blk.shadow ?? globalBoxShadow,
@@ -1062,33 +1093,31 @@ export default function LandingView({
                 <div
                   className={
                     blk.imageUrl
-                      ? "grid sm:grid-cols-2 gap-4 items-center"
+                      ? "grid grid-cols-1 sm:grid-cols-2 gap-4 items-center"
                       : "space-y-1.5"
                   }
                 >
                   <div>
                     <h3
                       style={{ color: st.color || primaryColor }}
-                      className="text-lg font-extrabold mb-1 break-words"
+                      className="text-base sm:text-lg font-extrabold mb-1 break-words"
                     >
                       {blk.title}
                     </h3>
                     <p
                       style={{ color: st.color || mutedTextColor }}
-                      className="text-sm leading-relaxed break-words"
+                      className="text-xs sm:text-sm leading-relaxed break-words"
                     >
                       {blk.description}
                     </p>
                   </div>
                   {blk.imageUrl && (
-                    <div className="relative h-40 w-full rounded-xl overflow-hidden border border-black/10">
-                      <Image
+                    <div className="w-full rounded-xl overflow-hidden border border-black/10">
+                      <img
                         src={blk.imageUrl}
                         alt={blk.title}
-                        fill
-                        style={getImageFilterCss(`${stKey}_img`)}
-                        className="object-cover"
-                        unoptimized={isPreview}
+                        style={getNaturalImageCss(`${stKey}_img`)}
+                        className="w-full h-auto object-contain"
                       />
                     </div>
                   )}
@@ -1148,20 +1177,22 @@ export default function LandingView({
 
   return (
     <div
-      style={{ backgroundColor: isMobileSim ? "#D8D4CC" : pageBgColor }}
-      className={`min-h-screen transition-colors duration-200 relative ${
-        isMobileSim ? "py-5 px-2 flex justify-center" : ""
+      style={{
+        backgroundColor: isEditMode && isMobileSim ? "#D8D4CC" : pageBgColor,
+      }}
+      className={`min-h-screen transition-colors duration-200 relative w-full overflow-x-hidden ${
+        isEditMode && isMobileSim ? "py-4 px-2 flex justify-center" : ""
       }`}
     >
       <main
         style={{
           backgroundColor: pageBgColor,
           color: textColor,
-          width: isMobileSim ? "390px" : "100%",
+          width: isEditMode && isMobileSim ? "390px" : "100%",
           maxWidth: "100%",
         }}
         className={`min-h-screen overflow-x-hidden transition-all duration-200 relative ${
-          isMobileSim
+          isEditMode && isMobileSim
             ? "rounded-[32px] border-[7px] border-stone-900 shadow-2xl"
             : ""
         }`}
@@ -1182,7 +1213,7 @@ export default function LandingView({
               getElStyle("topNoticeBar").backgroundColor || primaryColor,
             borderColor: "rgba(162, 171, 52, 0.35)",
           }}
-          className={`w-full overflow-hidden border-b py-1.5 px-3 flex items-center justify-center ${highlightClass(
+          className={`w-full overflow-hidden border-b py-1.5 px-2 flex items-center justify-center ${highlightClass(
             "top-ticker-bar"
           )}`}
         >
@@ -1191,16 +1222,16 @@ export default function LandingView({
               opacity: tickerVisible ? 1 : 0,
               transform: tickerVisible ? "translateY(0px)" : "translateY(-8px)",
             }}
-            className="max-w-6xl mx-auto transition-all duration-500 ease-out flex items-center justify-center overflow-hidden"
+            className="max-w-6xl w-full mx-auto transition-all duration-500 ease-out flex items-center justify-center"
           >
             <span
               style={getTextCss(
                 "topNoticeText",
-                isMobileSim ? 11.5 : 12.5,
+                isMobileSim ? 10.5 : 12.5,
                 "#FFFBEB",
                 "center"
               )}
-              className="inline-block whitespace-nowrap font-semibold tracking-wide"
+              className="inline-block font-semibold tracking-wide text-center leading-snug"
             >
               ✦ {topNoticeText} ✦
             </span>
@@ -1211,13 +1242,13 @@ export default function LandingView({
         {isEditMode && (
           <div
             style={{ left: `${dockPos.x}px`, top: `${dockPos.y}px` }}
-            className="fixed z-[95] flex items-start gap-2 select-none"
+            className="fixed z-[95] flex items-start gap-1.5 select-none max-w-[96vw]"
           >
-            <div className="bg-stone-950/95 backdrop-blur-md border border-stone-700/80 rounded-xl p-1.5 shadow-2xl flex flex-col items-center gap-1 text-stone-200">
+            <div className="bg-stone-950/95 backdrop-blur-md border border-stone-700/80 rounded-xl p-1 shadow-2xl flex flex-col items-center gap-1 text-stone-200 shrink-0">
               <div
                 onMouseDown={startDockDrag}
                 title="টেনে টুলবার সরান"
-                className="w-8 h-5 rounded bg-stone-800 hover:bg-stone-700 flex items-center justify-center cursor-move text-[10px] text-stone-300"
+                className="w-7 h-5 rounded bg-stone-800 hover:bg-stone-700 flex items-center justify-center cursor-move text-[10px] text-stone-300"
               >
                 ⋮⋮
               </div>
@@ -1239,11 +1270,11 @@ export default function LandingView({
                     ? { backgroundColor: "#A2AB34", color: "#1E1B24" }
                     : undefined
                 }
-                className="w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer hover:bg-stone-800 text-stone-200"
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition cursor-pointer hover:bg-stone-800 text-stone-200"
               >
                 <DynamicIcon
                   name={deviceView === "mobile" ? "Monitor" : "Smartphone"}
-                  className="w-4 h-4"
+                  className="w-3.5 h-3.5"
                 />
               </button>
 
@@ -1293,13 +1324,13 @@ export default function LandingView({
                       ? { backgroundColor: "#A2AB34", color: "#1E1B24" }
                       : undefined
                   }
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer ${
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition cursor-pointer ${
                     activeTool === t.id
                       ? "font-extrabold shadow"
                       : "hover:bg-stone-800 text-stone-300"
                   }`}
                 >
-                  <DynamicIcon name={t.icon} className="w-4 h-4" />
+                  <DynamicIcon name={t.icon} className="w-3.5 h-3.5" />
                 </button>
               ))}
 
@@ -1309,9 +1340,9 @@ export default function LandingView({
                   onClick={onUndo}
                   disabled={!canUndo}
                   title="Undo (Ctrl+Z)"
-                  className="w-8 h-8 mt-1 rounded-lg flex items-center justify-center bg-stone-800 text-amber-300 hover:bg-stone-700 disabled:opacity-30 cursor-pointer"
+                  className="w-7 h-7 mt-0.5 rounded-lg flex items-center justify-center bg-stone-800 text-amber-300 hover:bg-stone-700 disabled:opacity-30 cursor-pointer"
                 >
-                  <DynamicIcon name="Undo2" className="w-4 h-4" />
+                  <DynamicIcon name="Undo2" className="w-3.5 h-3.5" />
                 </button>
               )}
 
@@ -1321,9 +1352,9 @@ export default function LandingView({
                   onClick={onRedo}
                   disabled={!canRedo}
                   title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
-                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-stone-800 text-cyan-300 hover:bg-stone-700 disabled:opacity-30 cursor-pointer"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center bg-stone-800 text-cyan-300 hover:bg-stone-700 disabled:opacity-30 cursor-pointer"
                 >
-                  <DynamicIcon name="Redo2" className="w-4 h-4" />
+                  <DynamicIcon name="Redo2" className="w-3.5 h-3.5" />
                 </button>
               )}
 
@@ -1333,30 +1364,30 @@ export default function LandingView({
                   onClick={triggerSave}
                   disabled={saving}
                   title="Save Changes (Ctrl+S)"
-                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold disabled:opacity-50 cursor-pointer"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold disabled:opacity-50 cursor-pointer"
                 >
-                  <DynamicIcon name="Save" className="w-4 h-4" />
+                  <DynamicIcon name="Save" className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="w-[335px] max-w-[84vw] bg-stone-900/95 backdrop-blur-md border border-stone-700/80 rounded-xl shadow-2xl text-stone-100 text-xs overflow-hidden">
+            <div className="w-[310px] max-w-[78vw] bg-stone-900/95 backdrop-blur-md border border-stone-700/80 rounded-xl shadow-2xl text-stone-100 text-xs overflow-hidden">
               <div
                 onMouseDown={startDockDrag}
-                className="bg-stone-950 px-3 py-2 border-b border-stone-800 flex items-center justify-between gap-2 cursor-move"
+                className="bg-stone-950 px-2.5 py-2 border-b border-stone-800 flex items-center justify-between gap-1.5 cursor-move"
               >
-                <span className="font-extrabold text-[11px] tracking-wider text-[#A2AB34]">
+                <span className="font-extrabold text-[10px] tracking-wider text-[#A2AB34] truncate">
                   EDIT BAR (
-                  {deviceView === "mobile" ? "MOBILE ONLY" : "DESKTOP ONLY"})
+                  {deviceView === "mobile" ? "MOBILE" : "DESKTOP"})
                 </span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 shrink-0">
                   {onUndo && (
                     <button
                       type="button"
                       onClick={onUndo}
                       disabled={!canUndo}
                       title="Ctrl+Z"
-                      className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-amber-300 text-[10px] font-bold disabled:opacity-35 cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-amber-300 text-[10px] font-bold disabled:opacity-35 cursor-pointer"
                     >
                       Undo
                     </button>
@@ -1367,7 +1398,7 @@ export default function LandingView({
                       onClick={onRedo}
                       disabled={!canRedo}
                       title="Ctrl+Y"
-                      className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-cyan-300 text-[10px] font-bold disabled:opacity-35 cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-cyan-300 text-[10px] font-bold disabled:opacity-35 cursor-pointer"
                     >
                       Redo
                     </button>
@@ -1378,7 +1409,7 @@ export default function LandingView({
                       onClick={triggerSave}
                       disabled={saving}
                       title="Ctrl+S"
-                      className="px-2.5 py-0.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10px] font-extrabold disabled:opacity-50 cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10px] font-extrabold disabled:opacity-50 cursor-pointer"
                     >
                       {saving ? "..." : "Save"}
                     </button>
@@ -1386,7 +1417,7 @@ export default function LandingView({
                 </div>
               </div>
 
-              <div className="p-3 space-y-2.5 max-h-[76vh] overflow-y-auto bg-stone-900/90">
+              <div className="p-2.5 space-y-2.5 max-h-[75vh] overflow-y-auto bg-stone-900/90">
                 <div className="grid grid-cols-2 gap-1.5 bg-stone-950 p-1 rounded-lg border border-stone-800">
                   <button
                     type="button"
@@ -2133,8 +2164,8 @@ export default function LandingView({
                           <label className="block text-[10px] text-stone-400 mb-1">
                             লেখা / ছবির URL পরিবর্তন করুন
                           </label>
-                          <input
-                            type="text"
+                          <textarea
+                            rows={2}
                             value={getFieldValue(currentSelected.contentPath, "")}
                             onChange={(e) =>
                               applyContentChange(
@@ -2815,8 +2846,8 @@ export default function LandingView({
         {/* Hero Section */}
         <section
           style={{
-            paddingTop: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
-            paddingBottom: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
+            paddingTop: `${isMobileSim ? 18 : globalSectionPaddingY}px`,
+            paddingBottom: `${isMobileSim ? 18 : globalSectionPaddingY}px`,
           }}
           className="container mx-auto px-3.5 max-w-6xl"
         >
@@ -2825,7 +2856,7 @@ export default function LandingView({
               isMobileSim ? "grid-cols-1 gap-4" : "md:grid-cols-2 gap-10"
             } items-center`}
           >
-            <div className={isMobileSim ? "space-y-3" : ""}>
+            <div className={isMobileSim ? "space-y-3 min-w-0" : "min-w-0"}>
               <span
                 onClick={(e) =>
                   handleSelect(e, {
@@ -2860,10 +2891,10 @@ export default function LandingView({
                   })
                 }
                 style={{
-                  lineHeight: 1.18,
+                  lineHeight: 1.22,
                   ...getTextCss(
                     "heroTitle",
-                    isMobileSim ? 24 : globalHeroTitleSize,
+                    isMobileSim ? 23 : globalHeroTitleSize,
                     primaryColor
                   ),
                 }}
@@ -2913,11 +2944,11 @@ export default function LandingView({
                       }}
                       className={`font-medium ${
                         isMobileSim ? "px-2.5 py-1" : "px-3.5 py-2"
-                      } inline-flex items-center justify-center relative shrink-0 ${highlightClass(
+                      } inline-flex items-center justify-center relative max-w-full ${highlightClass(
                         `hero-tag-${i}`
                       )}`}
                     >
-                      <span className="whitespace-nowrap">✓ {cleanTag}</span>
+                      <span>✓ {cleanTag}</span>
                     </div>
                   );
                 })}
@@ -2935,7 +2966,7 @@ export default function LandingView({
                 }
                 style={getTextCss(
                   "heroDesc",
-                  isMobileSim ? 14 : globalHeroDescSize,
+                  isMobileSim ? 13.5 : globalHeroDescSize,
                   mutedTextColor
                 )}
                 className={`leading-relaxed ${
@@ -2978,12 +3009,14 @@ export default function LandingView({
                         fontFamily: st.fontFamily || "inherit",
                         fontWeight: st.bold ? 800 : 700,
                         fontStyle: st.italic ? "italic" : "normal",
-                        width: st.width
-                          ? `${clampNum(st.width, 80, 420, 180)}px`
-                          : undefined,
-                        height: st.height
-                          ? `${clampNum(st.height, 36, 120, 48)}px`
-                          : undefined,
+                        width:
+                          st.width && !isMobileSim
+                            ? `${clampNum(st.width, 80, 420, 180)}px`
+                            : undefined,
+                        height:
+                          st.height && !isMobileSim
+                            ? `${clampNum(st.height, 36, 120, 48)}px`
+                            : undefined,
                         borderRadius: `${
                           st.borderRadius ??
                           Math.max(10, globalBorderRadius * 0.55)
@@ -2991,14 +3024,14 @@ export default function LandingView({
                         boxShadow: st.boxShadow || globalBoxShadow,
                       }}
                       className={`hover:opacity-95 ${
-                        isMobileSim ? "px-4 py-2.5" : "px-7 py-3.5"
-                      } transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-1.5 cursor-pointer relative shrink-0 ${highlightClass(
+                        isMobileSim ? "px-3.5 py-2.5" : "px-7 py-3.5"
+                      } transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-1.5 cursor-pointer relative max-w-full ${highlightClass(
                         "btn-order"
                       )}`}
                     >
                       <DynamicIcon
                         name="ShoppingCart"
-                        className={isMobileSim ? "w-4 h-4" : "w-5 h-5"}
+                        className={isMobileSim ? "w-4 h-4 shrink-0" : "w-5 h-5 shrink-0"}
                       />
                       <span>অর্ডার করতে চাই</span>
                       {isEditMode && (
@@ -3044,12 +3077,14 @@ export default function LandingView({
                         fontFamily: st.fontFamily || "inherit",
                         fontWeight: st.bold ? 800 : 700,
                         fontStyle: st.italic ? "italic" : "normal",
-                        width: st.width
-                          ? `${clampNum(st.width, 80, 420, 160)}px`
-                          : undefined,
-                        height: st.height
-                          ? `${clampNum(st.height, 36, 120, 48)}px`
-                          : undefined,
+                        width:
+                          st.width && !isMobileSim
+                            ? `${clampNum(st.width, 80, 420, 160)}px`
+                            : undefined,
+                        height:
+                          st.height && !isMobileSim
+                            ? `${clampNum(st.height, 36, 120, 48)}px`
+                            : undefined,
                         borderRadius: `${
                           st.borderRadius ??
                           Math.max(10, globalBorderRadius * 0.55)
@@ -3057,8 +3092,8 @@ export default function LandingView({
                         boxShadow: st.boxShadow || globalBoxShadow,
                       }}
                       className={`hover:opacity-95 ${
-                        isMobileSim ? "px-4 py-2.5" : "px-7 py-3.5"
-                      } transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-1.5 cursor-pointer relative shrink-0 ${highlightClass(
+                        isMobileSim ? "px-3.5 py-2.5" : "px-7 py-3.5"
+                      } transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-1.5 cursor-pointer relative max-w-full ${highlightClass(
                         "btn-more"
                       )}`}
                     >
@@ -3093,9 +3128,8 @@ export default function LandingView({
                       styleKey: "heroImage",
                     })
                   }
-                  style={getImageWrapperCss(
+                  style={getNaturalImageWrapperCss(
                     "heroImage",
-                    isMobileSim ? 215 : globalHeroImageHeight,
                     globalBorderRadius,
                     globalImageShadow
                   )}
@@ -3104,15 +3138,11 @@ export default function LandingView({
                   )}`}
                 >
                   {renderZoomOverlay("heroImage")}
-                  <Image
+                  <img
                     src={heroImageUrl}
                     alt="Product Hero"
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    style={getImageFilterCss("heroImage")}
-                    className="object-cover transition-transform duration-200"
-                    priority
-                    unoptimized={isPreview}
+                    style={getNaturalImageCss("heroImage")}
+                    className="w-full h-auto object-contain transition-transform duration-200"
                   />
                   {isEditMode && (
                     <div
@@ -3155,7 +3185,7 @@ export default function LandingView({
             className={`shadow-inner ${highlightClass("features-sec")}`}
           >
             <div className="container mx-auto px-3.5 max-w-6xl">
-              <div className="flex flex-wrap items-stretch justify-center gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {content.features.map((feature: any, i: number) => {
                   const cardKey = `featureCard_${i}`;
                   const st = getElStyle(cardKey);
@@ -3178,11 +3208,11 @@ export default function LandingView({
                         "rgba(0,0,0,0.16)",
                         globalBorderRadius,
                         isMobileSim
-                          ? 12
+                          ? 14
                           : Math.max(18, globalBoxPadding * 0.85),
                         globalBoxShadow
                       )}
-                      className={`border border-white/25 flex flex-col items-center text-center transform hover:-translate-y-1 transition-all duration-200 relative shrink-0 ${highlightClass(
+                      className={`border border-white/25 flex flex-col items-center text-center transform hover:-translate-y-1 transition-all duration-200 relative w-full ${highlightClass(
                         `feat-card-${i}`
                       )}`}
                     >
@@ -3312,9 +3342,10 @@ export default function LandingView({
                     : galleryBannerStyle.backgroundColor || "transparent",
                 borderRadius: `${globalBorderRadius}px`,
                 padding: "0px",
-                width: galleryBannerWidth
-                  ? `${galleryBannerWidth}px`
-                  : undefined,
+                width:
+                  galleryBannerWidth && !isMobileSim
+                    ? `${galleryBannerWidth}px`
+                    : "100%",
                 maxWidth: "100%",
                 height:
                   galleryBannerHeight <= 0
@@ -3322,7 +3353,7 @@ export default function LandingView({
                     : `${Math.max(0, galleryBannerHeight)}px`,
                 minHeight: "0px",
               }}
-              className={`relative mx-auto flex flex-col justify-center overflow-visible ${
+              className={`relative mx-auto flex flex-col justify-center overflow-hidden ${
                 galleryBannerHeight <= 0
                   ? "border-0"
                   : "border border-[#A2AB34]/30"
@@ -3335,7 +3366,7 @@ export default function LandingView({
                     galleryBannerHeight > 0 ? galleryBannerHeight : 180
                   )}px`,
                 }}
-                className="relative w-full flex-1 flex items-center justify-center overflow-visible py-2"
+                className="relative w-full flex-1 flex items-center justify-center overflow-hidden py-2"
               >
                 {galleryImages.map((img, idx) => {
                   const style = getCardStyle(idx);
@@ -3374,20 +3405,18 @@ export default function LandingView({
                         width: `${perItemSize}px`,
                         height: `${perItemSize}px`,
                       }}
-                      className="absolute top-1/2 left-1/2 border-4 border-white shadow-2xl transition-all duration-300 ease-out cursor-pointer bg-black/20 overflow-hidden"
+                      className="absolute top-1/2 left-1/2 border-4 border-white shadow-2xl transition-all duration-300 ease-out cursor-pointer bg-black/10 flex items-center justify-center overflow-hidden"
                     >
                       {renderZoomOverlay(itemKey)}
-                      <Image
+                      <img
                         src={img.url || DEFAULT_PHOTO}
                         alt={img.caption || `Gallery Photo ${idx + 1}`}
-                        fill
                         style={{
                           filter: buildPhotoshopFilter(itemSt),
                           transform: `scale(${perItemZoom / 100})`,
                           transformOrigin: "center center",
                         }}
-                        className="object-cover transition-transform duration-200"
-                        unoptimized={isPreview}
+                        className="w-full h-full object-contain transition-transform duration-200"
                       />
                     </div>
                   );
@@ -3427,8 +3456,8 @@ export default function LandingView({
         <section
           id="details"
           style={{
-            paddingTop: `${isMobileSim ? 22 : globalSectionPaddingY}px`,
-            paddingBottom: `${isMobileSim ? 22 : globalSectionPaddingY}px`,
+            paddingTop: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
+            paddingBottom: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
           }}
           className="container mx-auto px-3.5 max-w-6xl"
         >
@@ -3455,10 +3484,10 @@ export default function LandingView({
                     "detailsBox",
                     boxBgColor,
                     globalBorderRadius,
-                    isMobileSim ? 16 : globalBoxPadding,
+                    isMobileSim ? 14 : globalBoxPadding,
                     globalBoxShadow
                   )}
-                  className={`border border-black/10 relative w-full ${highlightClass(
+                  className={`border border-black/10 relative w-full min-w-0 ${highlightClass(
                     "details-box-l"
                   )}`}
                 >
@@ -3473,25 +3502,21 @@ export default function LandingView({
                           styleKey: "detailsImage",
                         })
                       }
-                      style={getImageWrapperCss(
+                      style={getNaturalImageWrapperCss(
                         "detailsImage",
-                        isMobileSim ? 195 : 310,
                         Math.max(10, globalBorderRadius * 0.7),
                         globalImageShadow
                       )}
-                      className={`relative overflow-hidden mb-5 ${highlightClass(
+                      className={`relative overflow-hidden mb-4 ${highlightClass(
                         "details-img"
                       )}`}
                     >
                       {renderZoomOverlay("detailsImage")}
-                      <Image
+                      <img
                         src={getFieldValue("details.imageUrl", details.imageUrl)}
                         alt="Details"
-                        fill
-                        sizes="(max-width: 768px) 100vw, 50vw"
-                        style={getImageFilterCss("detailsImage")}
-                        className="object-cover transition-transform duration-200"
-                        unoptimized={isPreview}
+                        style={getNaturalImageCss("detailsImage")}
+                        className="w-full h-auto object-contain transition-transform duration-200"
                       />
                     </div>
                   )}
@@ -3509,7 +3534,7 @@ export default function LandingView({
                       }
                       style={getTextCss(
                         "detailsText1",
-                        isMobileSim ? 14 : 17,
+                        isMobileSim ? 13.5 : 17,
                         getElStyle("detailsBox").color || mutedTextColor
                       )}
                       className={`mb-4 leading-relaxed ${highlightClass(
@@ -3537,14 +3562,14 @@ export default function LandingView({
                           globalBorderRadius * 0.6
                         )}px`,
                       }}
-                      className={`border border-dashed border-[#73385E]/30 p-3.5 bg-[#A2AB34]/10 ${highlightClass(
+                      className={`border border-dashed border-[#73385E]/30 p-3 bg-[#A2AB34]/10 ${highlightClass(
                         "details-text-2"
                       )}`}
                     >
                       <p
                         style={getTextCss(
                           "detailsText2",
-                          isMobileSim ? 15 : 18,
+                          isMobileSim ? 14.5 : 18,
                           primaryColor,
                           "center"
                         )}
@@ -3589,10 +3614,10 @@ export default function LandingView({
                     "detailsPointsBox",
                     boxBgColor,
                     globalBorderRadius,
-                    isMobileSim ? 16 : globalBoxPadding,
+                    isMobileSim ? 14 : globalBoxPadding,
                     globalBoxShadow
                   )}
-                  className={`border border-black/10 flex flex-col justify-between relative w-full ${highlightClass(
+                  className={`border border-black/10 flex flex-col justify-between relative w-full min-w-0 ${highlightClass(
                     "details-box-r"
                   )}`}
                 >
@@ -3610,10 +3635,10 @@ export default function LandingView({
                         }
                         style={getTextCss(
                           "detailsPointsTitle",
-                          isMobileSim ? 20 : globalSectionTitleSize,
+                          isMobileSim ? 19 : globalSectionTitleSize,
                           getElStyle("detailsPointsBox").color || primaryColor
                         )}
-                        className={`font-bold mb-6 ${highlightClass(
+                        className={`font-bold mb-5 ${highlightClass(
                           "details-points-title"
                         )}`}
                       >
@@ -3621,17 +3646,17 @@ export default function LandingView({
                       </h2>
                     )}
 
-                    <div className="space-y-5">
+                    <div className="space-y-4">
                       {details.points?.map((point: any, i: number) => (
-                        <div key={i} className="flex gap-3.5">
-                          <div className="mt-1">
+                        <div key={i} className="flex gap-3 min-w-0">
+                          <div className="mt-1 shrink-0">
                             <DynamicIcon
                               name="CheckCircle2"
                               className="w-5 h-5"
                               style={{ color: accentColor }}
                             />
                           </div>
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <h3
                               onClick={(e) =>
                                 handleSelect(e, {
@@ -3644,7 +3669,7 @@ export default function LandingView({
                               }
                               style={getTextCss(
                                 "detailsPointTitle",
-                                isMobileSim ? 16 : 20,
+                                isMobileSim ? 15 : 20,
                                 getElStyle("detailsPointsBox").color ||
                                   primaryColor
                               )}
@@ -3688,7 +3713,7 @@ export default function LandingView({
                     </div>
                   </div>
 
-                  <div className="mt-7">
+                  <div className="mt-6">
                     <a
                       href={isEditMode ? undefined : "#order"}
                       onClick={(e) =>
@@ -3744,8 +3769,8 @@ export default function LandingView({
         {whyUs?.title && (
           <section
             style={{
-              paddingTop: `${isMobileSim ? 22 : globalSectionPaddingY}px`,
-              paddingBottom: `${isMobileSim ? 22 : globalSectionPaddingY}px`,
+              paddingTop: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
+              paddingBottom: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
               backgroundColor: primaryColor,
             }}
             className="text-white shadow-inner"
@@ -3767,9 +3792,8 @@ export default function LandingView({
                         styleKey: "whyUsImage",
                       })
                     }
-                    style={getImageWrapperCss(
+                    style={getNaturalImageWrapperCss(
                       "whyUsImage",
-                      isMobileSim ? 215 : 480,
                       globalBorderRadius,
                       globalImageShadow
                     )}
@@ -3778,14 +3802,11 @@ export default function LandingView({
                     )}`}
                   >
                     {renderZoomOverlay("whyUsImage")}
-                    <Image
+                    <img
                       src={getFieldValue("whyUs.imageUrl", whyUs.imageUrl)}
                       alt="Why Us"
-                      fill
-                      sizes="(max-width: 768px) 100vw, 50vw"
-                      style={getImageFilterCss("whyUsImage")}
-                      className="object-cover transition-transform duration-200"
-                      unoptimized={isPreview}
+                      style={getNaturalImageCss("whyUsImage")}
+                      className="w-full h-auto object-contain transition-transform duration-200"
                     />
                   </div>
                 )}
@@ -3808,10 +3829,10 @@ export default function LandingView({
                         "whyUsBox",
                         "rgba(0,0,0,0.18)",
                         globalBorderRadius,
-                        isMobileSim ? 16 : globalBoxPadding,
+                        isMobileSim ? 14 : globalBoxPadding,
                         globalBoxShadow
                       )}
-                      className={`border border-white/20 relative ${highlightClass(
+                      className={`border border-white/20 relative w-full min-w-0 ${highlightClass(
                         "why-box"
                       )}`}
                     >
@@ -3827,19 +3848,19 @@ export default function LandingView({
                         }
                         style={getTextCss(
                           "whyUsTitle",
-                          isMobileSim ? 20 : globalSectionTitleSize,
+                          isMobileSim ? 19 : globalSectionTitleSize,
                           getElStyle("whyUsBox").color || "#F8F5EE"
                         )}
-                        className={`font-bold mb-6 drop-shadow-sm ${highlightClass(
+                        className={`font-bold mb-5 drop-shadow-sm ${highlightClass(
                           "why-title"
                         )}`}
                       >
                         {getFieldValue("whyUs.title", whyUs.title)}
                       </h2>
 
-                      <div className="space-y-4">
+                      <div className="space-y-3.5">
                         {whyUs.points?.map((point: any, i: number) => (
-                          <div key={i} className="flex gap-3">
+                          <div key={i} className="flex gap-3 min-w-0">
                             <DynamicIcon
                               name="CheckSquare"
                               className="w-5 h-5 flex-shrink-0 mt-1"
@@ -3860,7 +3881,7 @@ export default function LandingView({
                                 isMobileSim ? 13 : 15,
                                 getElStyle("whyUsBox").color || "#FFFFFF"
                               )}
-                              className={`leading-relaxed font-medium ${highlightClass(
+                              className={`leading-relaxed font-medium flex-1 min-w-0 ${highlightClass(
                                 `why-pt-${i}`
                               )}`}
                             >
@@ -3879,7 +3900,7 @@ export default function LandingView({
                         ))}
                       </div>
 
-                      <div className="mt-7 flex flex-wrap gap-3">
+                      <div className="mt-6 flex flex-wrap gap-2.5">
                         <a
                           href={isEditMode ? undefined : "#order"}
                           style={{
@@ -3890,13 +3911,13 @@ export default function LandingView({
                               globalBorderRadius * 0.55
                             )}px`,
                           }}
-                          className="hover:opacity-95 px-6 py-3 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-2 text-sm"
+                          className="hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-2 text-xs sm:text-sm max-w-full"
                         >
                           <DynamicIcon
                             name="ShoppingCart"
-                            className="w-4 h-4"
+                            className="w-4 h-4 shrink-0"
                           />
-                          অর্ডার করতে চাই
+                          <span>অর্ডার করতে চাই</span>
                         </a>
                         <a
                           href={
@@ -3914,13 +3935,15 @@ export default function LandingView({
                               globalBorderRadius * 0.55
                             )}px`,
                           }}
-                          className="bg-[#2E8B57] hover:bg-[#246B43] text-white px-6 py-3 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-2 text-sm cursor-pointer"
+                          className="bg-[#2E8B57] hover:bg-[#246B43] text-white px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-2 text-xs sm:text-sm cursor-pointer max-w-full"
                         >
                           <DynamicIcon
                             name="MessageCircle"
-                            className="w-4 h-4"
+                            className="w-4 h-4 shrink-0"
                           />
-                          WhatsApp অর্ডার ({whatsappDisplay})
+                          <span className="truncate">
+                            WhatsApp অর্ডার ({whatsappDisplay})
+                          </span>
                         </a>
                       </div>
 
@@ -3946,8 +3969,8 @@ export default function LandingView({
         {/* Target Audience & Packages */}
         <section
           style={{
-            paddingTop: `${isMobileSim ? 22 : globalSectionPaddingY}px`,
-            paddingBottom: `${isMobileSim ? 22 : globalSectionPaddingY}px`,
+            paddingTop: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
+            paddingBottom: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
           }}
           className="container mx-auto px-3.5 max-w-6xl"
         >
@@ -3955,7 +3978,7 @@ export default function LandingView({
             <div
               className={`grid ${
                 isMobileSim ? "grid-cols-1 gap-5" : "md:grid-cols-2 gap-10"
-              } mb-10 items-center`}
+              } mb-8 items-center`}
             >
               {(() => {
                 const tBoxSt = getElStyle("targetBox");
@@ -3975,10 +3998,10 @@ export default function LandingView({
                       "targetBox",
                       boxBgColor,
                       globalBorderRadius,
-                      isMobileSim ? 16 : globalBoxPadding,
+                      isMobileSim ? 14 : globalBoxPadding,
                       globalBoxShadow
                     )}
-                    className={`border border-black/10 relative ${highlightClass(
+                    className={`border border-black/10 relative w-full min-w-0 ${highlightClass(
                       "tgt-box"
                     )}`}
                   >
@@ -3994,10 +4017,10 @@ export default function LandingView({
                       }
                       style={getTextCss(
                         "targetTitle",
-                        isMobileSim ? 20 : globalSectionTitleSize,
+                        isMobileSim ? 19 : globalSectionTitleSize,
                         getElStyle("targetBox").color || primaryColor
                       )}
-                      className={`font-bold mb-5 ${highlightClass(
+                      className={`font-bold mb-4 ${highlightClass(
                         "tgt-title"
                       )}`}
                     >
@@ -4006,12 +4029,12 @@ export default function LandingView({
                         targetAudience.title
                       )}
                     </h2>
-                    <div className="space-y-3 mb-6">
+                    <div className="space-y-3 mb-5">
                       {targetAudience.points?.map((point: any, i: number) => (
-                        <div key={i} className="flex gap-3 items-center">
+                        <div key={i} className="flex gap-3 items-start min-w-0">
                           <DynamicIcon
                             name="CheckCheck"
-                            className="w-5 h-5 flex-shrink-0"
+                            className="w-5 h-5 flex-shrink-0 mt-0.5"
                             style={{ color: accentColor }}
                           />
                           <p
@@ -4026,10 +4049,12 @@ export default function LandingView({
                             }
                             style={getTextCss(
                               "targetPoint",
-                              isMobileSim ? 14 : 16,
+                              isMobileSim ? 13.5 : 16,
                               getElStyle("targetBox").color || mutedTextColor
                             )}
-                            className={highlightClass(`tgt-pt-${i}`)}
+                            className={`flex-1 min-w-0 ${highlightClass(
+                              `tgt-pt-${i}`
+                            )}`}
                           >
                             {typeof point === "object" && point !== null
                               ? getFieldValue(
@@ -4058,13 +4083,13 @@ export default function LandingView({
                           globalBorderRadius * 0.55
                         )}px`,
                       }}
-                      className="inline-block hover:opacity-95 px-6 py-3 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 text-sm"
+                      className="inline-flex items-center gap-2 hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 text-xs sm:text-sm"
                     >
                       <DynamicIcon
                         name="ShoppingCart"
-                        className="w-4 h-4 inline mr-2"
+                        className="w-4 h-4 shrink-0"
                       />
-                      অর্ডার করতে চাই
+                      <span>অর্ডার করতে চাই</span>
                     </a>
                     {isEditMode && (
                       <div
@@ -4092,9 +4117,8 @@ export default function LandingView({
                       styleKey: "targetImage",
                     })
                   }
-                  style={getImageWrapperCss(
+                  style={getNaturalImageWrapperCss(
                     "targetImage",
-                    isMobileSim ? 210 : 400,
                     globalBorderRadius,
                     globalImageShadow
                   )}
@@ -4103,17 +4127,14 @@ export default function LandingView({
                   )}`}
                 >
                   {renderZoomOverlay("targetImage")}
-                  <Image
+                  <img
                     src={getFieldValue(
                       "targetAudience.imageUrl",
                       targetAudience.imageUrl
                     )}
                     alt="Target"
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    style={getImageFilterCss("targetImage")}
-                    className="object-cover transition-transform duration-200"
-                    unoptimized={isPreview}
+                    style={getNaturalImageCss("targetImage")}
+                    className="w-full h-auto object-contain transition-transform duration-200"
                   />
                 </div>
               )}
@@ -4126,7 +4147,7 @@ export default function LandingView({
               isMobileSim ? "gap-6" : "lg:grid-cols-2 gap-6"
             } items-start`}
           >
-            <div className="w-full">
+            <div className="w-full min-w-0">
               <div
                 style={{
                   backgroundColor: primaryColor,
@@ -4137,8 +4158,8 @@ export default function LandingView({
                 }}
                 className="text-white p-3.5 font-bold text-base flex items-center gap-2 shadow-sm"
               >
-                <DynamicIcon name="Gift" className="w-5 h-5" />
-                আপনার জন্য কোন প্যাকটি?
+                <DynamicIcon name="Gift" className="w-5 h-5 shrink-0" />
+                <span>আপনার জন্য কোন প্যাকটি?</span>
               </div>
               <div className="flex flex-col gap-3 mt-3">
                 {content?.packages?.map((pkg: any, i: number) => {
@@ -4166,23 +4187,23 @@ export default function LandingView({
                           : Math.max(16, globalBoxPadding * 0.7),
                         globalBoxShadow
                       )}
-                      className={`border border-black/10 relative w-full ${highlightClass(
+                      className={`border border-black/10 relative w-full min-w-0 ${highlightClass(
                         `pkg-box-${i}`
                       )}`}
                     >
                       <div
                         style={getTextCss(
                           "packageTitle",
-                          isMobileSim ? 16 : 18,
+                          isMobileSim ? 15.5 : 18,
                           pkgStyle.color || primaryColor
                         )}
-                        className="flex items-center gap-2 font-bold mb-1.5"
+                        className="flex items-start gap-2 font-bold mb-1.5"
                       >
                         <DynamicIcon
                           name={i === 0 ? "Users" : "Home"}
-                          className="w-4 h-4 shrink-0"
+                          className="w-4 h-4 shrink-0 mt-1"
                         />
-                        <span>
+                        <span className="min-w-0 flex-1">
                           {getFieldValue(`packages.${i}.name`, pkg.name)}
                         </span>
                       </div>
@@ -4227,19 +4248,19 @@ export default function LandingView({
                 style={{
                   borderRadius: `${Math.max(10, globalBorderRadius * 0.55)}px`,
                 }}
-                className="w-full mt-5 bg-[#2E8B57] hover:bg-[#246B43] text-white py-3.5 px-4 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-sm cursor-pointer"
+                className="w-full mt-5 bg-[#2E8B57] hover:bg-[#246B43] text-white py-3.5 px-4 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer"
               >
                 <DynamicIcon
                   name="MessageCircle"
                   className="w-5 h-5 shrink-0"
                 />
-                <span>
+                <span className="truncate">
                   WhatsApp-এ যোগাযোগ করুন ({whatsappDisplay})
                 </span>
               </a>
             </div>
 
-            <div className="w-full">
+            <div className="w-full min-w-0">
               <div
                 style={{
                   backgroundColor: accentColor,
@@ -4249,7 +4270,7 @@ export default function LandingView({
                     globalBorderRadius * 0.5
                   )}px ${Math.max(8, globalBorderRadius * 0.5)}px 0 0`,
                 }}
-                className="p-3.5 font-bold text-center text-lg shadow-sm"
+                className="p-3.5 font-bold text-center text-base sm:text-lg shadow-sm"
               >
                 সচরাচর জানতে চাওয়া প্রশ্ন
               </div>
@@ -4269,7 +4290,7 @@ export default function LandingView({
                   isMobileSim ? 14 : globalBoxPadding,
                   globalBoxShadow
                 )}
-                className={`border border-black/10 border-t-0 w-full ${highlightClass(
+                className={`border border-black/10 border-t-0 w-full min-w-0 ${highlightClass(
                   "faq-box"
                 )}`}
               >
@@ -4282,9 +4303,9 @@ export default function LandingView({
         {renderCustomBlocks("beforeFooter")}
 
         {/* Checkout / Order Form Section */}
-        <section id="order" className="container mx-auto px-3.5 max-w-5xl pb-14">
+        <section id="order" className="container mx-auto px-3.5 max-w-5xl pb-12">
           {discountEnabled && computedDiscountAmount > 0 && (
-            <div className="mb-3 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-emerald-900">
+            <div className="mb-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-emerald-900">
               <span>
                 🏷️ {discountLabel || "বিশেষ ছাড়"} চালু আছে (
                 {discountType === "percent"
@@ -4292,7 +4313,7 @@ export default function LandingView({
                   : `${discountValue}৳`}{" "}
                 ছাড়)
               </span>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <span>
                   আসল মূল্য{" "}
                   <span className="line-through">{baseProductPrice}৳</span> →
@@ -4324,10 +4345,10 @@ export default function LandingView({
               "orderFormBox",
               boxBgColor,
               globalBorderRadius,
-              getElStyle("orderFormBox").padding ?? 8,
+              getElStyle("orderFormBox").padding ?? 6,
               globalBoxShadow
             )}
-            className={`mx-auto border border-black/10 relative w-full ${highlightClass(
+            className={`mx-auto border border-black/10 relative w-full min-w-0 ${highlightClass(
               "order-form-box"
             )}`}
           >
@@ -4350,7 +4371,7 @@ export default function LandingView({
             backgroundColor:
               getElStyle("footerBox").backgroundColor || primaryColor,
           }}
-          className={`py-6 text-center text-white/90 border-t border-white/15 ${highlightClass(
+          className={`py-6 px-3 text-center text-white/90 border-t border-white/15 ${highlightClass(
             "footer-sec"
           )}`}
         >
