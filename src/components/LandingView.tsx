@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DynamicIcon } from "./DynamicIcon";
 import CheckoutForm from "./CheckoutForm";
 import FAQSection from "./FAQSection";
+import { bdLocations } from "@/lib/bdLocations";
+
 
 export interface SelectedElement {
   id: string;
@@ -124,6 +126,7 @@ export default function LandingView({
   onAddCustomBlock,
   onUpdateCustomBlock,
   onGalleryChange,
+  onOrderSubmit,
   onSave,
   saving = false,
   onUndo,
@@ -146,6 +149,7 @@ export default function LandingView({
   onAddCustomBlock?: (block: CustomBlockItem) => void;
   onUpdateCustomBlock?: (id: string, patch: Partial<CustomBlockItem>) => void;
   onGalleryChange?: (nextGallery: GalleryItem[]) => void;
+  onOrderSubmit?: (orderPayload: any) => Promise<void> | void;
   onSave?: () => Promise<void> | void;
   saving?: boolean;
   onUndo?: () => void;
@@ -563,7 +567,8 @@ export default function LandingView({
     setExtraAppendedDesc("");
   };
 
-  const handleDeleteDiscount = () => {
+  const handleDeleteDiscount = () =>
+     {
     applyContentChange("pricing.discountEnabled", false);
     applyContentChange("pricing.discountValue", 0);
     applyContentChange("pricing.freeShipping", false);
@@ -994,6 +999,10 @@ export default function LandingView({
     baseProductPrice - computedDiscountAmount
   );
 
+ const locationsData =
+    content?.locations || content?.districtsAndThanas || bdLocations || {};
+  const districtsList = Object.keys(locationsData || {});
+
   const pricing = {
     ...(content?.pricing || {
       productPrice: 1250,
@@ -1015,6 +1024,9 @@ export default function LandingView({
     paymentMethods,
     whatsappNumber: formattedWa,
     whatsappDisplay,
+    districts: districtsList,
+    districtsAndThanas: locationsData,
+    locations: locationsData,
   };
 
   const rawGallery: GalleryItem[] =
@@ -1172,8 +1184,11 @@ export default function LandingView({
       padding: isPhotoOnly ? 0 : newBoxMode === "flatText" ? 16 : globalBoxPadding,
       shadow: isTextOnly ? "none" : globalBoxShadow,
     };
+    const nextBlocks = [...mergedCustomBlocks, created];
     setLocalCustomBlocks((prev) => [...prev, created]);
+    setLocalOverrides((prev) => ({ ...prev, customBlocks: nextBlocks }));
     onAddCustomBlock?.(created);
+    onUpdateContent?.("customBlocks", nextBlocks);
     setNewBoxTitle("");
     setNewBoxDesc("");
     setNewBoxImg("");
@@ -1233,14 +1248,17 @@ export default function LandingView({
     const notes = getFieldValue(`extraBoxNotes.${styleKey}`, []);
     if (!Array.isArray(notes) || notes.length === 0) return null;
     return (
-      <div className="mt-3 space-y-1.5 border-t border-current/15 pt-2.5">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="mt-3 space-y-1.5 border-t border-current/15 pt-2.5"
+      >
         {notes.map((note: string, idx: number) => (
           <div
             key={idx}
             className="flex items-start justify-between gap-2 text-xs sm:text-sm"
             style={{ color: defaultColor }}
           >
-            <span>• {note}</span>
+            <span className="break-words flex-1 min-w-0">• {note}</span>
             {isEditMode && (
               <button
                 type="button"
@@ -1249,9 +1267,9 @@ export default function LandingView({
                   const next = notes.filter((_: any, i: number) => i !== idx);
                   applyContentChange(`extraBoxNotes.${styleKey}`, next);
                 }}
-                className="text-[10px] text-rose-500 hover:underline shrink-0 cursor-pointer"
+                className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold shrink-0 cursor-pointer"
               >
-                মুছুন
+                Delete
               </button>
             )}
           </div>
@@ -1444,6 +1462,24 @@ export default function LandingView({
         isEditMode && isMobileSim ? "py-4 px-2 flex justify-center" : ""
       }`}
     >
+      <style jsx global>{`
+        @keyframes freeDeliveryBlinkGlow {
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.65), 0 8px 20px rgba(5, 150, 105, 0.35);
+          }
+          50% {
+            opacity: 0.45;
+            transform: scale(1.03);
+            box-shadow: 0 0 22px 4px rgba(16, 185, 129, 0.9), 0 8px 24px rgba(5, 150, 105, 0.5);
+          }
+        }
+        .free-delivery-blink {
+          animation: freeDeliveryBlinkGlow 1.25s ease-in-out infinite;
+        }
+      `}</style>
+
       <main
         style={{
           backgroundColor: pageBgColor,
@@ -1788,7 +1824,11 @@ export default function LandingView({
                       </div>
                       <div className="flex justify-between text-stone-300">
                         <span>ডেলিভারি (ভেতরে / বাইরে):</span>
-                        <span className="font-bold text-emerald-300">
+                        <span
+                          className={`font-bold text-emerald-300 ${
+                            freeShipping ? "free-delivery-blink" : ""
+                          }`}
+                        >
                           {freeShipping
                             ? "ফ্রি ডেলিভারি (0৳)"
                             : `${effectiveShippingInside}৳ / ${effectiveShippingOutside}৳`}
@@ -1870,13 +1910,17 @@ export default function LandingView({
                       </div>
                     </div>
 
-                    {/* ডিসকাউন্ট হিসেবে ডেলিভারি চার্জ ফ্রি করার অপশন */}
-                    <label className="flex items-center justify-between gap-2 bg-stone-900 border border-emerald-700/60 rounded px-2.5 py-2 cursor-pointer">
+                    {/* ডিসকাউন্ট হিসেবে ডেলিভারি চার্জ ফ্রি করার বড় ও জ্বলন্ত অপশন */}
+                    <label
+                      className={`flex items-center justify-between gap-2.5 bg-stone-900 border-2 border-emerald-400 rounded-xl px-3 py-2.5 cursor-pointer ${
+                        freeShipping ? "free-delivery-blink" : ""
+                      }`}
+                    >
                       <div>
-                        <div className="text-[11px] font-bold text-emerald-300">
-                          🚚 ডেলিভারি চার্জ ছাড় (Free Delivery)
+                        <div className="text-sm font-black text-emerald-300 tracking-wide">
+                          🚚 ডেলিভারি চার্জ একদম ফ্রি!
                         </div>
-                        <div className="text-[9.5px] text-stone-400">
+                        <div className="text-[10.5px] text-emerald-100/90 font-medium mt-0.5">
                           চালু করলে ভেতরে ও বাইরে ডেলিভারি চার্জ ০৳ হবে
                         </div>
                       </div>
@@ -1889,7 +1933,7 @@ export default function LandingView({
                             e.target.checked
                           )
                         }
-                        className="accent-[#A2AB34] w-4 h-4 shrink-0"
+                        className="accent-[#A2AB34] w-5 h-5 shrink-0 cursor-pointer"
                       />
                     </label>
 
@@ -2015,7 +2059,11 @@ export default function LandingView({
                       </div>
                       <div className="flex justify-between text-cyan-300 font-bold">
                         <span>ডেলিভারি চার্জ:</span>
-                        <span>
+                        <span
+                          className={
+                            freeShipping ? "free-delivery-blink text-emerald-300" : ""
+                          }
+                        >
                           {freeShipping
                             ? "ফ্রি (0৳)"
                             : `${baseShippingInside}৳ / ${baseShippingOutside}৳`}
@@ -3196,126 +3244,6 @@ export default function LandingView({
                           </label>
                         </div>
                       </div>
-
-                      <div>
-                        <div className="text-[10px] text-stone-400 mb-1">
-                          Alignment (বাম / মাঝ / ডান)
-                        </div>
-                        <div className="grid grid-cols-4 gap-1 bg-stone-900 p-1 rounded border border-stone-800">
-                          {(
-                            [
-                              { val: "left", lbl: "বাম (L)" },
-                              { val: "center", lbl: "মাঝ (C)" },
-                              { val: "right", lbl: "ডান (R)" },
-                              { val: "justify", lbl: "পূর্ণ (J)" },
-                            ] as const
-                          ).map((al) => (
-                            <button
-                              key={al.val}
-                              type="button"
-                              onClick={() =>
-                                applyStyle(
-                                  currentSelected.styleKey,
-                                  "textAlign",
-                                  al.val
-                                )
-                              }
-                              style={
-                                (activeStyle.textAlign || "left") === al.val
-                                  ? {
-                                      backgroundColor: "#A2AB34",
-                                      color: "#1E1B24",
-                                    }
-                                  : undefined
-                              }
-                              className={`py-1 rounded text-[10px] font-bold cursor-pointer ${
-                                (activeStyle.textAlign || "left") === al.val
-                                  ? ""
-                                  : "text-stone-300 hover:bg-stone-800"
-                              }`}
-                            >
-                              {al.lbl}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span>Width (Max 1150px)</span>
-                          <span>{activeStyle.width || "Auto"}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="60"
-                          max="1150"
-                          value={clampNum(activeStyle.width, 60, 1150, 240)}
-                          onChange={(e) =>
-                            applyResize(
-                              currentSelected.styleKey,
-                              Number(e.target.value),
-                              undefined
-                            )
-                          }
-                          className="w-full accent-[#A2AB34]"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span>Height (Max 900px)</span>
-                          <span>{activeStyle.height || "Auto"}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="32"
-                          max="900"
-                          value={clampNum(activeStyle.height, 32, 900, 90)}
-                          onChange={(e) =>
-                            applyResize(
-                              currentSelected.styleKey,
-                              undefined,
-                              Number(e.target.value)
-                            )
-                          }
-                          className="w-full accent-[#A2AB34]"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span>Padding (Max 48px)</span>
-                          <span>
-                            {clampNum(
-                              activeStyle.padding,
-                              0,
-                              48,
-                              globalBoxPadding
-                            )}
-                            px
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="48"
-                          value={clampNum(
-                            activeStyle.padding,
-                            0,
-                            48,
-                            globalBoxPadding
-                          )}
-                          onChange={(e) =>
-                            applyStyle(
-                              currentSelected.styleKey,
-                              "padding",
-                              Number(e.target.value)
-                            )
-                          }
-                          className="w-full accent-[#A2AB34]"
-                        />
-                      </div>
-
                       <div>
                         <div className="flex justify-between mb-1">
                           <span>Corner Shape (Radius)</span>
@@ -4241,6 +4169,11 @@ export default function LandingView({
                     </div>
                   </div>
 
+                  {renderExtraBoxNotes(
+                    "detailsPointsBox",
+                    getElStyle("detailsPointsBox").color || mutedTextColor
+                  )}
+
                   <div className="mt-6">
                     <a
                       href={isEditMode ? undefined : "#order"}
@@ -4453,6 +4386,11 @@ export default function LandingView({
                         ))}
                       </div>
 
+                      {renderExtraBoxNotes(
+                        "whyUsBox",
+                        getElStyle("whyUsBox").color || "#FFFFFF"
+                      )}
+
                       <div className="mt-6 flex flex-wrap gap-2.5">
                         <a
                           href={isEditMode ? undefined : "#order"}
@@ -4604,13 +4542,13 @@ export default function LandingView({
             paddingTop: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
             paddingBottom: `${isMobileSim ? 20 : globalSectionPaddingY}px`,
           }}
-          className="container mx-auto px-3.5 max-w-6xl"
+          className="container mx-auto px-3.5 max-w-6xl space-y-8"
         >
           {targetAudience?.title && (
             <div
               className={`grid ${
-                isMobileSim ? "grid-cols-1 gap-5" : "md:grid-cols-2 gap-10"
-              } mb-8 items-center`}
+                isMobileSim ? "grid-cols-1 gap-5" : "md:grid-cols-2 gap-8"
+              } items-center`}
             >
               {(() => {
                 const tBoxSt = getElStyle("targetBox");
@@ -4619,6 +4557,7 @@ export default function LandingView({
                 const tBtnSt = getElStyle("targetOrderBtn");
                 const tBtnW = tBtnSt.width || 180;
                 const tBtnH = tBtnSt.height || 44;
+
                 return (
                   <div
                     onClick={(e) =>
@@ -4708,6 +4647,12 @@ export default function LandingView({
                         </div>
                       ))}
                     </div>
+
+                    {renderExtraBoxNotes(
+                      "targetBox",
+                      getElStyle("targetBox").color || mutedTextColor
+                    )}
+
                     <a
                       href={isEditMode ? undefined : "#order"}
                       onClick={(e) =>
@@ -4806,6 +4751,18 @@ export default function LandingView({
                     style={getNaturalImageCss("targetImage")}
                     className="w-full h-auto object-contain transition-transform duration-200"
                   />
+                  {isEditMode && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        applyContentChange("targetAudience.imageUrl", "");
+                      }}
+                      className="absolute top-2 right-2 z-30 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold shadow cursor-pointer"
+                    >
+                      ছবি Delete
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -4889,6 +4846,12 @@ export default function LandingView({
                           pkg.description
                         )}
                       </p>
+
+                      {renderExtraBoxNotes(
+                        `packageBox_${i}`,
+                        pkgStyle.color || mutedTextColor
+                      )}
+
                       {isEditMode && (
                         <div
                           onMouseDown={(e) =>
@@ -5006,6 +4969,10 @@ export default function LandingView({
                 )}`}
               >
                 <FAQSection faqs={content?.faqs || []} />
+                {renderExtraBoxNotes(
+                  "faqBox",
+                  getElStyle("faqBox").color || mutedTextColor
+                )}
               </div>
             </div>
           </div>
@@ -5014,7 +4981,16 @@ export default function LandingView({
         {renderCustomBlocks("beforeFooter")}
 
         {/* Checkout / Order Form Section */}
+        
         <section id="order" className="container mx-auto px-3.5 max-w-5xl pb-12">
+          {freeShipping && (
+            <div className="mb-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-white px-4 py-3.5 flex flex-wrap items-center justify-center gap-3 text-center free-delivery-blink border-2 border-emerald-200">
+              <span className="text-lg sm:text-2xl font-black tracking-wide">
+                🚚 ডেলিভারি চার্জ একদম ফ্রি! (সারা দেশে 0৳ ডেলিভারি)
+              </span>
+            </div>
+          )}
+
           {(discountEnabled && computedDiscountAmount > 0) || freeShipping ? (
             <div className="mb-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-emerald-900">
               <div className="flex flex-wrap items-center gap-2">
@@ -5028,8 +5004,8 @@ export default function LandingView({
                   </span>
                 )}
                 {freeShipping && (
-                  <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[11px]">
-                    🚚 ফ্রি ডেলিভারি চালু
+                  <span className="bg-emerald-600 text-white px-2.5 py-1 rounded-full text-xs sm:text-sm font-black free-delivery-blink">
+                    🚚 ডেলিভারি চার্জ ফ্রি (0৳)
                   </span>
                 )}
               </div>
@@ -5075,6 +5051,7 @@ export default function LandingView({
             )}`}
           >
             <CheckoutForm pricing={pricing} isMobile={isMobileSim} />
+            
           </div>
         </section>
 
