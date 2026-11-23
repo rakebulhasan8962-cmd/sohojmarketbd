@@ -6,7 +6,6 @@ import CheckoutForm from "./CheckoutForm";
 import FAQSection from "./FAQSection";
 import { bdLocations } from "@/lib/bdLocations";
 
-
 export interface SelectedElement {
   id: string;
   label: string;
@@ -126,7 +125,6 @@ export default function LandingView({
   onAddCustomBlock,
   onUpdateCustomBlock,
   onGalleryChange,
-  onOrderSubmit,
   onSave,
   saving = false,
   onUndo,
@@ -149,7 +147,6 @@ export default function LandingView({
   onAddCustomBlock?: (block: CustomBlockItem) => void;
   onUpdateCustomBlock?: (id: string, patch: Partial<CustomBlockItem>) => void;
   onGalleryChange?: (nextGallery: GalleryItem[]) => void;
-  onOrderSubmit?: (orderPayload: any) => Promise<void> | void;
   onSave?: () => Promise<void> | void;
   saving?: boolean;
   onUndo?: () => void;
@@ -469,6 +466,84 @@ export default function LandingView({
     }
   };
 
+  const handleDeletePointItem = (
+    sectionKey: "details.points" | "whyUs.points" | "targetAudience.points",
+    indexToRemove: number
+  ) => {
+    const fallbackArr =
+      sectionKey === "details.points"
+        ? content?.details?.points
+        : sectionKey === "whyUs.points"
+        ? content?.whyUs?.points
+        : content?.targetAudience?.points;
+
+    const existing = getFieldValue(
+      sectionKey,
+      Array.isArray(fallbackArr) ? fallbackArr : []
+    );
+    if (!Array.isArray(existing)) return;
+    const nextArr = existing.filter((_: any, idx: number) => idx !== indexToRemove);
+    applyContentChange(sectionKey, nextArr);
+    setActiveEl(null);
+  };
+
+  const handleDeleteSelectedContent = (sel: SelectedElement | null) => {
+    if (!sel) return;
+
+    if (sel.type === "customBlock" && sel.customId) {
+      handleDeleteCustomBlock(sel.customId);
+      return;
+    }
+
+    if (sel.contentPath) {
+      const path = sel.contentPath;
+
+      const pointMatch = path.match(
+        /^(details\.points|whyUs\.points|targetAudience\.points)\.(\d+)/
+      );
+      if (pointMatch) {
+        handleDeletePointItem(
+          pointMatch[1] as
+            | "details.points"
+            | "whyUs.points"
+            | "targetAudience.points",
+          Number(pointMatch[2])
+        );
+        return;
+      }
+
+      const arrayItemMatch = path.match(
+        /^(.*?)\.(\d+)\.(title|description|name|caption|url)$/
+      );
+      if (arrayItemMatch) {
+        const [, arrPath, idxStr, fieldName] = arrayItemMatch;
+        const idx = Number(idxStr);
+        const existingArr = getFieldValue(arrPath, []);
+        if (Array.isArray(existingArr) && existingArr[idx]) {
+          const nextArr = [...existingArr];
+          nextArr[idx] = { ...nextArr[idx], [fieldName]: "" };
+          applyContentChange(arrPath, nextArr);
+          return;
+        }
+      }
+
+      const plainArrayMatch = path.match(/^(.*?)\.(\d+)$/);
+      if (plainArrayMatch) {
+        const [, arrPath, idxStr] = plainArrayMatch;
+        const idx = Number(idxStr);
+        const existingArr = getFieldValue(arrPath, []);
+        if (Array.isArray(existingArr)) {
+          const nextArr = existingArr.filter((_: any, i: number) => i !== idx);
+          applyContentChange(arrPath, nextArr);
+          setActiveEl(null);
+          return;
+        }
+      }
+
+      applyContentChange(path, "");
+    }
+  };
+
   // বক্সের ভেতরে নতুন লেখা / পয়েন্ট যুক্ত করার ফাংশন
   const handleAppendTextToSelectedBox = (sel: SelectedElement) => {
     const titleVal = extraAppendedText.trim();
@@ -567,8 +642,7 @@ export default function LandingView({
     setExtraAppendedDesc("");
   };
 
-  const handleDeleteDiscount = () =>
-     {
+  const handleDeleteDiscount = () => {
     applyContentChange("pricing.discountEnabled", false);
     applyContentChange("pricing.discountValue", 0);
     applyContentChange("pricing.freeShipping", false);
@@ -999,7 +1073,7 @@ export default function LandingView({
     baseProductPrice - computedDiscountAmount
   );
 
- const locationsData =
+  const locationsData =
     content?.locations || content?.districtsAndThanas || bdLocations || {};
   const districtsList = Object.keys(locationsData || {});
 
@@ -1937,6 +2011,46 @@ export default function LandingView({
                       />
                     </label>
 
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className="block text-[10px] text-stone-400 mb-1">
+                          ভেতরে ডেলিভারি চার্জ (৳)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="50000"
+                          value={baseShippingInside}
+                          onChange={(e) =>
+                            applyContentChange(
+                              "pricing.shippingInside",
+                              clampNum(e.target.value, 0, 50000, 60)
+                            )
+                          }
+                          className="w-full bg-stone-900 border border-stone-700 rounded px-2 py-1.5 text-white font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-stone-400 mb-1">
+                          বাইরে ডেলিভারি চার্জ (৳)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="50000"
+                          value={baseShippingOutside}
+                          onChange={(e) =>
+                            applyContentChange(
+                              "pricing.shippingOutside",
+                              clampNum(e.target.value, 0, 50000, 120)
+                            )
+                          }
+                          className="w-full bg-stone-900 border border-stone-700 rounded px-2 py-1.5 text-white font-bold"
+                        />
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-[10px] text-stone-400 mb-1">
                         আসল মূল্য (Original Price ৳)
@@ -2626,7 +2740,19 @@ export default function LandingView({
                         <span className="truncate">
                           সিলেক্টেড: {currentSelected.label}
                         </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
+                          {currentSelected.contentPath && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSelectedContent(currentSelected);
+                              }}
+                              className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          )}
                           {currentSelected.type === "customBlock" &&
                             currentSelected.customId && (
                               <button
@@ -3244,6 +3370,7 @@ export default function LandingView({
                           </label>
                         </div>
                       </div>
+
                       <div>
                         <div className="flex justify-between mb-1">
                           <span>Corner Shape (Radius)</span>
@@ -4104,66 +4231,85 @@ export default function LandingView({
 
                     <div className="space-y-4">
                       {activeDetailsPoints.map((point: any, i: number) => (
-                        <div key={i} className="flex gap-3 min-w-0">
-                          <div className="mt-1 shrink-0">
-                            <DynamicIcon
-                              name="CheckCircle2"
-                              className="w-5 h-5"
-                              style={{ color: accentColor }}
-                            />
+                        <div
+                          key={i}
+                          className="flex items-start justify-between gap-2 min-w-0"
+                        >
+                          <div className="flex gap-3 min-w-0 flex-1">
+                            <div className="mt-1 shrink-0">
+                              <DynamicIcon
+                                name="CheckCircle2"
+                                className="w-5 h-5"
+                                style={{ color: accentColor }}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3
+                                onClick={(e) =>
+                                  handleSelect(e, {
+                                    id: `details-pt-title-${i}`,
+                                    label: `Details পয়েন্ট #${i + 1} শিরোনাম`,
+                                    type: "text",
+                                    contentPath: `details.points.${i}.title`,
+                                    styleKey: "detailsPointTitle",
+                                  })
+                                }
+                                style={getTextCss(
+                                  "detailsPointTitle",
+                                  isMobileSim ? 15 : 20,
+                                  getElStyle("detailsPointsBox").color ||
+                                    primaryColor
+                                )}
+                                className={`font-bold mb-1 ${highlightClass(
+                                  `details-pt-title-${i}`
+                                )}`}
+                              >
+                                {getFieldValue(
+                                  `details.points.${i}.title`,
+                                  point.title
+                                )}
+                              </h3>
+                              <p
+                                onClick={(e) =>
+                                  handleSelect(e, {
+                                    id: `details-pt-desc-${i}`,
+                                    label: `Details পয়েন্ট #${i + 1} বিবরণ`,
+                                    type: "text",
+                                    contentPath: `details.points.${i}.description`,
+                                    styleKey: "detailsPointDesc",
+                                  })
+                                }
+                                style={getTextCss(
+                                  "detailsPointDesc",
+                                  isMobileSim ? 13 : 15,
+                                  getElStyle("detailsPointsBox").color ||
+                                    mutedTextColor
+                                )}
+                                className={`leading-relaxed ${highlightClass(
+                                  `details-pt-desc-${i}`
+                                )}`}
+                              >
+                                {getFieldValue(
+                                  `details.points.${i}.description`,
+                                  point.description
+                                )}
+                              </p>
+                            </div>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <h3
-                              onClick={(e) =>
-                                handleSelect(e, {
-                                  id: `details-pt-title-${i}`,
-                                  label: `Details পয়েন্ট #${i + 1} শিরোনাম`,
-                                  type: "text",
-                                  contentPath: `details.points.${i}.title`,
-                                  styleKey: "detailsPointTitle",
-                                })
-                              }
-                              style={getTextCss(
-                                "detailsPointTitle",
-                                isMobileSim ? 15 : 20,
-                                getElStyle("detailsPointsBox").color ||
-                                  primaryColor
-                              )}
-                              className={`font-bold mb-1 ${highlightClass(
-                                `details-pt-title-${i}`
-                              )}`}
+
+                          {isEditMode && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePointItem("details.points", i);
+                              }}
+                              title="এই পয়েন্টটি ডিলিট করুন"
+                              className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold shrink-0 cursor-pointer"
                             >
-                              {getFieldValue(
-                                `details.points.${i}.title`,
-                                point.title
-                              )}
-                            </h3>
-                            <p
-                              onClick={(e) =>
-                                handleSelect(e, {
-                                  id: `details-pt-desc-${i}`,
-                                  label: `Details পয়েন্ট #${i + 1} বিবরণ`,
-                                  type: "text",
-                                  contentPath: `details.points.${i}.description`,
-                                  styleKey: "detailsPointDesc",
-                                })
-                              }
-                              style={getTextCss(
-                                "detailsPointDesc",
-                                isMobileSim ? 13 : 15,
-                                getElStyle("detailsPointsBox").color ||
-                                  mutedTextColor
-                              )}
-                              className={`leading-relaxed ${highlightClass(
-                                `details-pt-desc-${i}`
-                              )}`}
-                            >
-                              {getFieldValue(
-                                `details.points.${i}.description`,
-                                point.description
-                              )}
-                            </p>
-                          </div>
+                              Delete
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -4345,45 +4491,75 @@ export default function LandingView({
                       </h2>
 
                       <div className="space-y-3.5">
-                        {activeWhyUsPoints.map((point: any, i: number) => (
-                          <div key={i} className="flex gap-3 min-w-0">
-                            <DynamicIcon
-                              name="CheckSquare"
-                              className="w-5 h-5 flex-shrink-0 mt-1"
-                              style={{ color: accentColor }}
-                            />
-                            <p
-                              onClick={(e) =>
-                                handleSelect(e, {
-                                  id: `why-pt-${i}`,
-                                  label: `Why Us পয়েন্ট #${i + 1}`,
-                                  type: "text",
-                                  contentPath: `whyUs.points.${i}.title`,
-                                  styleKey: "whyUsPointText",
-                                })
-                              }
-                              style={getTextCss(
-                                "whyUsPointText",
-                                isMobileSim ? 13 : 15,
-                                getElStyle("whyUsBox").color || "#FFFFFF"
-                              )}
-                              className={`leading-relaxed font-medium flex-1 min-w-0 ${highlightClass(
-                                `why-pt-${i}`
-                              )}`}
+                        {activeWhyUsPoints.map((point: any, i: number) => {
+                          const ptTitle = getFieldValue(
+                            `whyUs.points.${i}.title`,
+                            point.title
+                          );
+                          const ptDesc = getFieldValue(
+                            `whyUs.points.${i}.description`,
+                            point.description
+                          );
+
+                          return (
+                            <div
+                              key={i}
+                              className="flex items-start justify-between gap-2 min-w-0"
                             >
-                              <span
-                                className="font-bold"
-                                style={{ color: accentColor }}
-                              >
-                                {getFieldValue(
-                                  `whyUs.points.${i}.title`,
-                                  point.title
-                                )}
-                              </span>{" "}
-                              {point.description && `: ${point.description}`}
-                            </p>
-                          </div>
-                        ))}
+                              <div className="flex gap-3 min-w-0 flex-1">
+                                <DynamicIcon
+                                  name="CheckSquare"
+                                  className="w-5 h-5 flex-shrink-0 mt-1"
+                                  style={{ color: accentColor }}
+                                />
+                                <p
+                                  onClick={(e) =>
+                                    handleSelect(e, {
+                                      id: `why-pt-${i}`,
+                                      label: `Why Us পয়েন্ট #${i + 1}`,
+                                      type: "text",
+                                      contentPath: `whyUs.points.${i}.title`,
+                                      styleKey: "whyUsPointText",
+                                    })
+                                  }
+                                  style={getTextCss(
+                                    "whyUsPointText",
+                                    isMobileSim ? 13 : 15,
+                                    getElStyle("whyUsBox").color || "#FFFFFF"
+                                  )}
+                                  className={`leading-relaxed font-medium flex-1 min-w-0 ${highlightClass(
+                                    `why-pt-${i}`
+                                  )}`}
+                                >
+                                  {ptTitle && (
+                                    <span
+                                      className="font-bold"
+                                      style={{ color: accentColor }}
+                                    >
+                                      {ptTitle}
+                                    </span>
+                                  )}
+                                  {ptTitle && ptDesc ? " : " : ""}
+                                  {ptDesc}
+                                </p>
+                              </div>
+
+                              {isEditMode && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeletePointItem("whyUs.points", i);
+                                  }}
+                                  title="এই পয়েন্টটি ডিলিট করুন"
+                                  className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold shrink-0 cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {renderExtraBoxNotes(
@@ -4981,54 +5157,55 @@ export default function LandingView({
         {renderCustomBlocks("beforeFooter")}
 
         {/* Checkout / Order Form Section */}
-        
         <section id="order" className="container mx-auto px-3.5 max-w-5xl pb-12">
+          {/* ১ম লাইন: শুধু ফ্রি ডেলিভারি */}
           {freeShipping && (
-            <div className="mb-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-white px-4 py-3.5 flex flex-wrap items-center justify-center gap-3 text-center free-delivery-blink border-2 border-emerald-200">
-              <span className="text-lg sm:text-2xl font-black tracking-wide">
+            <div className="mb-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-center free-delivery-blink border-2 border-emerald-200">
+              <span className="text-sm sm:text-lg font-black tracking-wide mx-auto">
                 🚚 ডেলিভারি চার্জ একদম ফ্রি! (সারা দেশে 0৳ ডেলিভারি)
               </span>
+              {isEditMode && (
+                <button
+                  type="button"
+                  onClick={() => applyContentChange("pricing.freeShipping", false)}
+                  className="px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           )}
 
-          {(discountEnabled && computedDiscountAmount > 0) || freeShipping ? (
-            <div className="mb-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-emerald-900">
-              <div className="flex flex-wrap items-center gap-2">
-                {discountEnabled && computedDiscountAmount > 0 && (
-                  <span>
-                    🏷️ {discountLabel || "বিশেষ ছাড়"} চালু আছে (
-                    {discountType === "percent"
-                      ? `${discountValue}%`
-                      : `${discountValue}৳`}{" "}
-                    ছাড়)
-                  </span>
-                )}
-                {freeShipping && (
-                  <span className="bg-emerald-600 text-white px-2.5 py-1 rounded-full text-xs sm:text-sm font-black free-delivery-blink">
-                    🚚 ডেলিভারি চার্জ ফ্রি (0৳)
-                  </span>
-                )}
+          {/* ২য় লাইন: শুধু ডিসকাউন্ট / ছাড় */}
+          {discountEnabled && computedDiscountAmount > 0 && (
+            <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm font-bold text-emerald-900">
+              <div>
+                🏷️ {discountLabel || "বিশেষ ছাড়"}:{" "}
+                <span>
+                  {discountType === "percent"
+                    ? `${discountValue}% ছাড়`
+                    : `${discountValue}৳ ছাড়`}
+                </span>{" "}
+                •{" "}
+                <span>
+                  আসল মূল্য{" "}
+                  <span className="line-through text-stone-500">
+                    {baseProductPrice}৳
+                  </span>{" "}
+                  → ডিসকাউন্ট মূল্য <strong>{computedDiscountedPrice}৳</strong>
+                </span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {discountEnabled && computedDiscountAmount > 0 && (
-                  <span>
-                    আসল মূল্য{" "}
-                    <span className="line-through">{baseProductPrice}৳</span> →
-                    ডিসকাউন্ট মূল্য <strong>{computedDiscountedPrice}৳</strong>
-                  </span>
-                )}
-                {isEditMode && (
-                  <button
-                    type="button"
-                    onClick={handleDeleteDiscount}
-                    className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
+              {isEditMode && (
+                <button
+                  type="button"
+                  onClick={handleDeleteDiscount}
+                  className="px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold cursor-pointer"
+                >
+                  Delete
+                </button>
+              )}
             </div>
-          ) : null}
+          )}
 
           <div
             onClick={(e) =>
@@ -5051,7 +5228,6 @@ export default function LandingView({
             )}`}
           >
             <CheckoutForm pricing={pricing} isMobile={isMobileSim} />
-            
           </div>
         </section>
 
