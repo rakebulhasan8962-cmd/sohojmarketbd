@@ -195,14 +195,25 @@ export default function LandingView({
   const [extraAppendedText, setExtraAppendedText] = useState("");
   const [extraAppendedDesc, setExtraAppendedDesc] = useState("");
 
-  const [isRealMobile, setIsRealMobile] = useState<boolean>(false);
+  const [isRealMobile, setIsRealMobile] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+
   useEffect(() => {
-    const checkMobile = () => {
-      setIsRealMobile(window.innerWidth < 768);
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => {
+      setIsRealMobile(mq.matches || window.innerWidth < 768);
     };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
+    update();
+    mq.addEventListener("change", update);
+    window.addEventListener("resize", update);
+    return () => {
+      mq.removeEventListener("change", update);
+      window.removeEventListener("resize", update);
+    };
   }, []);
 
   useEffect(() => {
@@ -907,7 +918,7 @@ export default function LandingView({
   const highlightClass = (id: string) => {
     if (!isEditMode) return "";
     const isSel = currentSelectedId === id;
-    return `cursor-pointer transition-all duration-150 ${
+    return `cursor-pointer transition-colors duration-150 ${
       isSel
         ? "ring-4 ring-[#A2AB34] ring-offset-2 relative z-20"
         : "hover:ring-2 hover:ring-[#73385E]/85 hover:ring-offset-1"
@@ -1532,7 +1543,7 @@ export default function LandingView({
       style={{
         backgroundColor: isEditMode && isMobileSim ? "#D8D4CC" : pageBgColor,
       }}
-      className={`min-h-screen transition-colors duration-200 relative w-full overflow-x-hidden ${
+      className={`min-h-screen transition-colors duration-150 relative w-full overflow-x-hidden ${
         isEditMode && isMobileSim ? "py-4 px-2 flex justify-center" : ""
       }`}
     >
@@ -1561,7 +1572,7 @@ export default function LandingView({
           width: isEditMode && isMobileSim ? "390px" : "100%",
           maxWidth: "100%",
         }}
-        className={`min-h-screen overflow-x-hidden transition-all duration-200 relative ${
+        className={`min-h-screen w-full overflow-x-hidden transition-colors duration-150 relative ${
           isEditMode && isMobileSim
             ? "rounded-[32px] border-[7px] border-stone-900 shadow-2xl"
             : ""
@@ -1592,7 +1603,7 @@ export default function LandingView({
               opacity: tickerVisible ? 1 : 0,
               transform: tickerVisible ? "translateY(0px)" : "translateY(-8px)",
             }}
-            className="max-w-6xl w-full mx-auto transition-all duration-500 ease-out flex items-center justify-center"
+            className="max-w-6xl w-full mx-auto transition-[transform,opacity] duration-300 ease-out flex items-center justify-center"
           >
             <span
               style={getTextCss(
@@ -1640,7 +1651,7 @@ export default function LandingView({
                     ? { backgroundColor: "#A2AB34", color: "#1E1B24" }
                     : undefined
                 }
-                className="w-7 h-7 rounded-lg flex items-center justify-center transition cursor-pointer hover:bg-stone-800 text-stone-200"
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer hover:bg-stone-800 text-stone-200"
               >
                 <DynamicIcon
                   name={deviceView === "mobile" ? "Monitor" : "Smartphone"}
@@ -1699,7 +1710,7 @@ export default function LandingView({
                       ? { backgroundColor: "#A2AB34", color: "#1E1B24" }
                       : undefined
                   }
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition cursor-pointer ${
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
                     activeTool === t.id
                       ? "font-extrabold shadow"
                       : "hover:bg-stone-800 text-stone-300"
@@ -3604,7 +3615,7 @@ export default function LandingView({
                       }}
                       className={`hover:opacity-95 ${
                         isMobileSim ? "px-3.5 py-2.5" : "px-7 py-3.5"
-                      } transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-1.5 cursor-pointer relative max-w-full ${highlightClass(
+                      } transform hover:-translate-y-0.5 transition-transform duration-150 flex items-center gap-1.5 cursor-pointer relative max-w-full ${highlightClass(
                         "btn-order"
                       )}`}
                     >
@@ -3674,7 +3685,7 @@ export default function LandingView({
                       }}
                       className={`hover:opacity-95 ${
                         isMobileSim ? "px-3.5 py-2.5" : "px-7 py-3.5"
-                      } transform hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-1.5 cursor-pointer relative max-w-full ${highlightClass(
+                      } transform hover:-translate-y-0.5 transition-transform duration-150 flex items-center gap-1.5 cursor-pointer relative max-w-full ${highlightClass(
                         "btn-more"
                       )}`}
                     >
@@ -3723,7 +3734,7 @@ export default function LandingView({
                     src={heroImageUrl}
                     alt="Product Hero"
                     style={getNaturalImageCss("heroImage")}
-                    className="w-full h-auto object-contain transition-transform duration-200"
+                    className="w-full h-auto object-contain transition-transform duration-150"
                   />
                   {isEditMode && (
                     <div
@@ -3793,7 +3804,7 @@ export default function LandingView({
                           : Math.max(18, globalBoxPadding * 0.85),
                         globalBoxShadow
                       )}
-                      className={`border border-white/25 flex flex-col items-center text-center transform hover:-translate-y-1 transition-all duration-200 relative w-full ${highlightClass(
+                      className={`border border-white/25 flex flex-col items-center text-center transform hover:-translate-y-1 transition-transform duration-150 relative w-full ${highlightClass(
                         `feat-card-${i}`
                       )}`}
                     >
@@ -3979,7 +3990,7 @@ export default function LandingView({
                         width: `${perItemSize}px`,
                         height: `${perItemSize}px`,
                       }}
-                      className="absolute top-1/2 left-1/2 border-4 border-white shadow-2xl transition-all duration-300 ease-out cursor-pointer bg-white overflow-hidden"
+                      className="absolute top-1/2 left-1/2 border-4 border-white shadow-2xl transition-[transform,opacity] duration-200 ease-out cursor-pointer bg-white overflow-hidden"
                     >
                       {renderZoomOverlay(itemKey)}
                       <img
@@ -3990,7 +4001,7 @@ export default function LandingView({
                           transform: `scale(${perItemZoom / 100})`,
                           transformOrigin: "center center",
                         }}
-                        className="w-full h-full object-cover transition-transform duration-200"
+                        className="w-full h-full object-cover transition-transform duration-150"
                       />
                     </div>
                   );
@@ -4004,7 +4015,7 @@ export default function LandingView({
                         prevSlide();
                       }}
                       aria-label="Previous Gallery Photo"
-                      className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 bg-white/90 hover:bg-white text-gray-900 p-2 md:p-2.5 rounded-full shadow-lg transition-all cursor-pointer"
+                      className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 bg-white/90 hover:bg-white text-gray-900 p-2 md:p-2.5 rounded-full shadow-lg transition-colors cursor-pointer"
                     >
                       <DynamicIcon name="ChevronLeft" className="w-4 h-4" />
                     </button>
@@ -4015,7 +4026,7 @@ export default function LandingView({
                         nextSlide();
                       }}
                       aria-label="Next Gallery Photo"
-                      className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-40 bg-white/90 hover:bg-white text-gray-900 p-2 md:p-2.5 rounded-full shadow-lg transition-all cursor-pointer"
+                      className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-40 bg-white/90 hover:bg-white text-gray-900 p-2 md:p-2.5 rounded-full shadow-lg transition-colors cursor-pointer"
                     >
                       <DynamicIcon name="ChevronRight" className="w-4 h-4" />
                     </button>
@@ -4092,7 +4103,7 @@ export default function LandingView({
                         src={getFieldValue("details.imageUrl", details.imageUrl)}
                         alt="Details"
                         style={getNaturalImageCss("detailsImage")}
-                        className="w-full h-auto object-contain transition-transform duration-200"
+                        className="w-full h-auto object-contain transition-transform duration-150"
                       />
                     </div>
                   )}
@@ -4355,7 +4366,7 @@ export default function LandingView({
                         }px`,
                         boxShadow: btnSt.boxShadow || globalBoxShadow,
                       }}
-                      className={`inline-flex items-center justify-center gap-2 hover:opacity-95 px-6 py-3 transform hover:-translate-y-0.5 transition-all duration-200 cursor-pointer relative ${highlightClass(
+                      className={`inline-flex items-center justify-center gap-2 hover:opacity-95 px-6 py-3 transform hover:-translate-y-0.5 transition-transform duration-150 cursor-pointer relative ${highlightClass(
                         "details-order-btn"
                       )}`}
                     >
@@ -4432,7 +4443,7 @@ export default function LandingView({
                       src={getFieldValue("whyUs.imageUrl", whyUs.imageUrl)}
                       alt="Why Us"
                       style={getNaturalImageCss("whyUsImage")}
-                      className="w-full h-auto object-contain transition-transform duration-200"
+                      className="w-full h-auto object-contain transition-transform duration-150"
                     />
                   </div>
                 )}
@@ -4601,7 +4612,7 @@ export default function LandingView({
                               Math.max(10, globalBorderRadius * 0.55)
                             }px`,
                           }}
-                          className={`hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm max-w-full cursor-pointer relative ${highlightClass(
+                          className={`hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-transform duration-150 flex items-center justify-center gap-2 text-xs sm:text-sm max-w-full cursor-pointer relative ${highlightClass(
                             "why-order-btn"
                           )}`}
                         >
@@ -4668,7 +4679,7 @@ export default function LandingView({
                               Math.max(10, globalBorderRadius * 0.55)
                             }px`,
                           }}
-                          className={`hover:opacity-95 text-white px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer max-w-full relative ${highlightClass(
+                          className={`hover:opacity-95 text-white px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-transform duration-150 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer max-w-full relative ${highlightClass(
                             "why-wa-btn"
                           )}`}
                         >
@@ -4856,7 +4867,7 @@ export default function LandingView({
                           Math.max(10, globalBorderRadius * 0.55)
                         }px`,
                       }}
-                      className={`inline-flex items-center justify-center gap-2 hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 text-xs sm:text-sm cursor-pointer relative ${highlightClass(
+                      className={`inline-flex items-center justify-center gap-2 hover:opacity-95 px-5 py-2.5 font-bold shadow-md transform hover:-translate-y-0.5 transition-transform duration-150 text-xs sm:text-sm cursor-pointer relative ${highlightClass(
                         "tgt-order-btn"
                       )}`}
                     >
@@ -4925,7 +4936,7 @@ export default function LandingView({
                     )}
                     alt="Target"
                     style={getNaturalImageCss("targetImage")}
-                    className="w-full h-auto object-contain transition-transform duration-200"
+                    className="w-full h-auto object-contain transition-transform duration-150"
                   />
                   {isEditMode && (
                     <button
@@ -5083,7 +5094,7 @@ export default function LandingView({
                         Math.max(10, globalBorderRadius * 0.55)
                       }px`,
                     }}
-                    className={`w-full mt-5 hover:opacity-95 text-white py-3.5 px-4 font-bold shadow-md transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer relative ${highlightClass(
+                    className={`w-full mt-5 hover:opacity-95 text-white py-3.5 px-4 font-bold shadow-md transform hover:-translate-y-0.5 transition-transform duration-150 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer relative ${highlightClass(
                       "pkg-wa-btn"
                     )}`}
                   >
