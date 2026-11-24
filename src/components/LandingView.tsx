@@ -195,12 +195,8 @@ export default function LandingView({
   const [extraAppendedText, setExtraAppendedText] = useState("");
   const [extraAppendedDesc, setExtraAppendedDesc] = useState("");
 
-  const [isRealMobile, setIsRealMobile] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return window.innerWidth < 768;
-    }
-    return false;
-  });
+  // Hydration নিরাপদ মোবাইল ভিউ স্টেট
+  const [isRealMobile, setIsRealMobile] = useState<boolean>(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
@@ -222,8 +218,7 @@ export default function LandingView({
 
   const [tickerVisible, setTickerVisible] = useState(true);
   const [deviceView, setDeviceView] = useState<"desktop" | "mobile">("desktop");
-  const isMobileSim =
-    (isEditMode && deviceView === "mobile") || (!isEditMode && isRealMobile);
+  const isMobileSim = isEditMode ? deviceView === "mobile" : isRealMobile;
 
   const [dockPos, setDockPos] = useState<{ x: number; y: number }>({
     x: 12,
@@ -699,11 +694,13 @@ export default function LandingView({
         st.borderRadius !== undefined
           ? `${clampNum(st.borderRadius, 0, 48, 8)}px`
           : undefined,
-      width:
-        st.width && !isMobileSim
-          ? `${clampNum(st.width, 60, 1150, 300)}px`
-          : undefined,
+      width: isMobileSim
+        ? "100%"
+        : st.width
+        ? `${clampNum(st.width, 60, 1150, 300)}px`
+        : undefined,
       maxWidth: "100%",
+      minWidth: 0,
       height: st.height ? `${clampNum(st.height, 24, 900, 60)}px` : undefined,
       overflowWrap: "anywhere",
       wordBreak: "break-word",
@@ -722,13 +719,15 @@ export default function LandingView({
       backgroundColor: st.backgroundColor || defaultBg,
       color: st.color || undefined,
       textAlign: st.textAlign || undefined,
-      width:
-        st.width && !isMobileSim
-          ? `${clampNum(st.width, 60, 1150, 400)}px`
-          : "100%",
+      width: isMobileSim
+        ? "100%"
+        : st.width
+        ? `${clampNum(st.width, 60, 1150, 400)}px`
+        : "100%",
       maxWidth: "100%",
+      minWidth: 0,
       minHeight:
-        st.height && !isMobileSim
+        !isMobileSim && st.height
           ? `${clampNum(st.height, 40, 900, 180)}px`
           : undefined,
       borderRadius: `${clampNum(st.borderRadius, 0, 48, defaultRadius)}px`,
@@ -753,11 +752,13 @@ export default function LandingView({
   ): React.CSSProperties => {
     const st = getElStyle(key);
     return {
-      width:
-        st.width && !isMobileSim
-          ? `${clampNum(st.width, 80, 1150, 520)}px`
-          : "100%",
+      width: isMobileSim
+        ? "100%"
+        : st.width
+        ? `${clampNum(st.width, 80, 1150, 520)}px`
+        : "100%",
       maxWidth: "100%",
+      minWidth: 0,
       height: "auto",
       borderRadius: `${clampNum(st.borderRadius, 0, 48, defaultRadius)}px`,
       boxShadow: st.boxShadow ?? defaultShadow,
@@ -1426,6 +1427,7 @@ export default function LandingView({
                   borderStyle: "solid",
                   width: isMobileSim ? "100%" : `${w}px`,
                   maxWidth: "100%",
+                  minWidth: 0,
                   minHeight: isMobileSim ? undefined : `${h}px`,
                   borderRadius: `${r}px`,
                   padding: `${p}px`,
