@@ -3759,22 +3759,22 @@ export default function LandingView({
                   lineHeight: 1.22,
                   ...getTextCss(
                     "heroTitle",
-                    isMobileSim ? 23 : globalHeroTitleSize,
+isMobileSim ? 22 : Math.min(globalHeroTitleSize, 36),
                     primaryColor
                   ),
                 }}
-                className={`font-extrabold ${
-                  isMobileSim ? "mb-1" : "mb-6"
-                } ${highlightClass("hero-title")}`}
+               className={`w-full max-w-full min-w-0 break-words font-extrabold ${
+  isMobileSim ? "mb-1" : "mb-6"
+} ${highlightClass("hero-title")}`}
               >
                 {heroTitle}
               </h1>
 
               {/* ট্যাগ বাটনগুলো কম্প্যাক্ট ও পাশাপাশি বসার মতো */}
               <div
-                className={`flex flex-wrap ${
-                  isMobileSim ? "gap-1.5 mb-2 justify-start" : "gap-2.5 mb-6"
-                }`}
+                className={`w-full max-w-full min-w-0 flex flex-wrap ${
+  isMobileSim ? "gap-1.5 mb-2 justify-start" : "gap-2.5 mb-6"
+}`}
               >
                 {heroTags.map((tag: string, i: number) => {
                   const cleanTag = String(tag).replace(/^✓\s*/, "");
@@ -3981,7 +3981,12 @@ export default function LandingView({
 
             {(() => {
               const st = getElStyle("heroImage");
-              const w = clampNum(st.width, 60, 1150, isMobileSim ? 345 : 540);
+              const w = clampNum(
+  st.width,
+  60,
+  isMobileSim ? 300 : 1150,
+  isMobileSim ? 280 : 540
+);
               const h = clampNum(
                 st.height,
                 60,
@@ -4004,7 +4009,7 @@ export default function LandingView({
                     globalBorderRadius,
                     globalImageShadow
                   )}
-                  className={`relative overflow-hidden ${highlightClass(
+                  className={` w-full max-w-full min-w-0 relative overflow-hidden ${highlightClass(
                     "hero-image"
                   )}`}
                 >
