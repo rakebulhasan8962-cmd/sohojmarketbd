@@ -10,42 +10,36 @@
   --color-brand-bg: #FFFFFF;
 }
 
-body {
-  background-color: var(--color-brand-bg);
-  color: var(--color-brand-text);
-  font-family: var(--font-hind-siliguri), sans-serif;
-  font-size: 18px;
-  line-height: 1.7;
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-size: 17px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    background-color: var(--color-brand-bg);
+    color: var(--color-brand-text);
+    font-family: var(--font-hind-siliguri), sans-serif;
+    font-size: 18px;
+    line-height: 1.7;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--color-brand-heading);
+  }
 }
 
-h1, h2, h3, h4, h5, h6 {
-  color: var(--color-brand-heading);
-}
-
-/* স্ক্রিনশটের মতো বড় ও আকর্ষণীয় ফন্ট সাইজ */
 .hero-title {
-  font-size: clamp(2.5rem, 5vw, 4rem); /* প্রায় 64px পর্যন্ত বড় হবে */
+  font-size: clamp(1.5rem, 5vw, 4rem);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
 .section-title {
-  font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+  font-size: clamp(1.35rem, 3.5vw, 2.75rem);
   font-weight: 700;
-}
-@import "tailwindcss";
-
-/* পেজ স্ক্রলিং স্মুথ করার জন্য */
-html {
-  scroll-behavior: smooth;
-}
-@layer base {
-  html {
-    font-size: 17px; /* ডিফল্ট 16px থাকে, 17px বা 18px দিলে সব লেখা সুন্দর বড় দেখাবে */
-  }
-}
-html,
-body {
-  max-width: 100%;
-  overflow-x: hidden;
 }
