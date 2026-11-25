@@ -114,6 +114,7 @@ async function compressImageToSafeDataUrl(
   });
 }
 
+
 export default function LandingView({
   content,
   isPreview = false,
@@ -199,17 +200,16 @@ export default function LandingView({
   // Hydration নিরাপদ মোবাইল ভিউ স্টেট
   const [isRealMobile, setIsRealMobile] = useState<boolean>(false);
 
-  useEffect(() => {
+ useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const update = () => {
-      setIsRealMobile(mq.matches || window.innerWidth < 768);
+      const nextMobile = mq.matches || window.innerWidth < 768;
+      setIsRealMobile((prev) => (prev === nextMobile ? prev : nextMobile));
     };
     update();
     mq.addEventListener("change", update);
-    window.addEventListener("resize", update);
     return () => {
       mq.removeEventListener("change", update);
-      window.removeEventListener("resize", update);
     };
   }, []);
 
@@ -416,6 +416,32 @@ export default function LandingView({
       return () => clearTimeout(t);
     }, 3600);
     return () => clearInterval(interval);
+  }, []);
+
+
+  const productRef = useRef<HTMLDivElement | null>(null);
+  const viewedRef = useRef(false);
+
+  useEffect(() => {
+    const el = productRef.current;
+    if (!el || viewedRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !viewedRef.current) {
+          viewedRef.current = true;
+          trackPixelEvent("ViewContent", {
+            content_name: "Grape Cluster Hanging Soap",
+            currency: "BDT",
+          });
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.35 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   const getFieldValue = useCallback(
@@ -1090,23 +1116,23 @@ export default function LandingView({
   const hero = content?.hero || {};
   const heroBadge = getFieldValue(
     "hero.badge",
-    hero.badge?.trim() || "Premium Khejur Gur"
+    hero.badge?.trim() || "Hanging Hand Soap"
   );
   const heroTitle = getFieldValue(
     "hero.title",
-    hero.title?.trim() || "প্রতিটি কামড়ে খাঁটি গ্রামবাংলার স্বাদ"
+    hero.title?.trim() || "একগুচ্ছ সাবান, আপনার বাথরুমেও যোগ করবে সৌন্দর্য।"
   );
 
   const baseTags: string[] =
     hero.tags?.length > 0
       ? hero.tags
-      : ["১০০% খাঁটি", "চিনিমুক্ত", "ঐতিহ্যবাহী স্বাদ"];
+      : ["✓ ১০০% হ্যান্ডমেড", "✓ প্রাকৃতিক সুগন্ধি", "✓ স্কিন-ফ্রেন্ডলি"];
   const heroTags = baseTags.map((t, i) => getFieldValue(`hero.tags.${i}`, t));
 
   const heroDescription = getFieldValue(
     "hero.description",
     hero.description?.trim() ||
-      "সাধারণ গুড় নয়। শীতের সকালের ঘ্রাণ আর সুবাস নিয়ে, সরাসরি গাছ থেকে সংগ্রহ করা রসে তৈরি খাঁটি খেজুরের গুড়।"
+      "সাধারণ সাবানের বাইরে একটু নতুনত্ব নিয়ে আসুন! আঙুরের থোকার আদলে হাতে তৈরি আকর্ষণীয় Hanging Soap। মনোরম Grape Fragrance এবং ঝুলিয়ে রাখার সুবিধাসহ প্রতিদিনের পরিচ্ছন্নতার অভ্যাসে যোগ করুন একটু ভিন্নতা।"
   );
   const heroImageUrl = getFieldValue(
     "hero.imageUrl",
@@ -1525,7 +1551,7 @@ export default function LandingView({
                   padding: `${p}px`,
                   boxShadow: st.boxShadow ?? blk.shadow ?? globalBoxShadow,
                 }}
-                className={`relative shrink-0 overflow-hidden ${highlightClass(
+                className={`relative min-w-0 overflow-hidden ${highlightClass(
                   `custom-blk-${blk.id || i}`
                 )}`}
               >
@@ -1536,7 +1562,7 @@ export default function LandingView({
                       src={blk.imageUrl || DEFAULT_PHOTO}
                       alt={blk.title || "Custom Photo"}
                       style={getResizableImageCss(`${stKey}_img`)}
-                      className="w-full h-auto object-contain"
+                      className="w-full max-w-full h-auto object-contain"
                     />
                   </div>
                 ) : (
@@ -3824,17 +3850,25 @@ export default function LandingView({
                   const w = clampNum(st.width, 80, 420, 180);
                   const h = clampNum(st.height, 36, 120, 48);
                   return (
-                    <a
-                      href={isEditMode ? undefined : "#order"}
-                      onClick={(e) =>
-                        handleSelect(e, {
-                          id: "btn-order",
-                          label: "অর্ডার করতে চাই বাটন",
-                          type: "button",
-                          contentPath: "orderButtonText",
-                          styleKey: "btnOrder",
-                        })
-                      }
+                    
+                      <a
+  href={isEditMode ? undefined : "#order"}
+  onClick={(e) => {
+    if (!isEditMode) {
+      trackPixelEvent("InitiateCheckout", {
+        content_name: "Grape Cluster Hanging Soap",
+        currency: "BDT",
+      });
+    }
+    handleSelect(e, {
+      id: "btn-order",
+      label: "অর্ডার করতে চাই বাটন",
+      type: "button",
+      contentPath: "orderButtonText",
+      styleKey: "btnOrder",
+    });
+  }}
+                      
                       style={{
                         backgroundColor: st.backgroundColor || accentColor,
                         color: st.color || "#FFFFFF",
@@ -3979,7 +4013,7 @@ export default function LandingView({
                     src={heroImageUrl}
                     alt="Product Hero"
                     style={getResizableImageCss("heroImage")}
-                    className="transition-transform duration-150"
+                    className="w-full max-w-full h-auto object-cover transition-transform duration-150"
                   />
                   {isEditMode && (
                     <div
