@@ -4,6 +4,7 @@ import { useState } from "react";
 import { submitOrder, getOrdersByPhone } from "@/app/actions";
 import { DynamicIcon } from "./DynamicIcon";
 import { bdLocations } from "@/lib/bdLocations";
+import { trackPixelEvent } from "@/lib/metaPixel";
 
 export default function CheckoutForm({
   pricing,
@@ -89,6 +90,13 @@ export default function CheckoutForm({
       const displaySerial = formatOrderSerial(result.order.id);
       setSubmittedOrder({ ...result.order, displaySerial });
 
+      trackPixelEvent("Purchase", {
+        content_name: pricing?.productName || "Grape Cluster Hanging Soap",
+        value: Number(total) || 0,
+        currency: "BDT",
+        num_items: Number(quantity) || 1,
+        order_id: String(displaySerial),
+      });
       const shippingText =
         shippingArea === "inside"
           ? `ঢাকার ভিতরে (${shippingFee}৳)`

@@ -5,6 +5,7 @@ import { DynamicIcon } from "./DynamicIcon";
 import CheckoutForm from "./CheckoutForm";
 import FAQSection from "./FAQSection";
 import { bdLocations } from "@/lib/bdLocations";
+import { trackPixelEvent } from "@/lib/metaPixel";
 
 export interface SelectedElement {
   id: string;
