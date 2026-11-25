@@ -198,7 +198,11 @@ export default function LandingView({
   const [extraAppendedDesc, setExtraAppendedDesc] = useState("");
 
   // Hydration নিরাপদ মোবাইল ভিউ স্টেট
-  const [isRealMobile, setIsRealMobile] = useState<boolean>(false);
+const [isRealMobile, setIsRealMobile] = useState<boolean>(() =>
+  typeof window !== "undefined"
+    ? window.matchMedia("(max-width: 767px)").matches || window.innerWidth < 768
+    : false
+);
 
  useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
