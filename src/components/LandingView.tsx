@@ -3810,11 +3810,11 @@ isMobileSim ? 22 : Math.min(globalHeroTitleSize, 36),
                       }}
                       className={`font-medium ${
                         isMobileSim ? "px-2.5 py-1" : "px-3.5 py-2"
-                      } inline-flex w-fit items-center justify-center relative max-w-full shrink-0 ${highlightClass(
+                      } inline-flex w-fit items-center justify-center relative max-w-full ${highlightClass(
                         `hero-tag-${i}`
                       )}`}
                     >
-                      <span>✓ {cleanTag}</span>
+                      <span className="max-w-full break-words">✓ {cleanTag}</span>
                     </div>
                   );
                 })}
@@ -3835,15 +3835,15 @@ isMobileSim ? 22 : Math.min(globalHeroTitleSize, 36),
                   isMobileSim ? 13.5 : globalHeroDescSize,
                   mutedTextColor
                 )}
-                className={`leading-relaxed ${
-                  isMobileSim ? "mb-2" : "mb-8"
-                } ${highlightClass("hero-desc")}`}
+               className={`w-full max-w-full min-w-0 break-words leading-relaxed ${
+  isMobileSim ? "mb-2" : "mb-8"
+} ${highlightClass("hero-desc")}`}
               >
                 {heroDescription}
               </p>
 
               <div
-                className={`flex flex-wrap ${isMobileSim ? "gap-2" : "gap-3.5"}`}
+                className={`flex flex-wrap w-full max-w-full min-w-0 ${isMobileSim ?  "gap-2" : "gap-3.5"}`}
               >
                 {(() => {
                   const st = getElStyle("btnOrder");
