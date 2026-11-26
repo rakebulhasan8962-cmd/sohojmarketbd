@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { submitOrder, getOrdersByPhone } from "@/app/actions";
 import { DynamicIcon } from "./DynamicIcon";
 import { bdLocations } from "@/lib/bdLocations";
@@ -96,6 +96,8 @@ export default function CheckoutForm({
   const [district, setDistrict] = useState<string>("");
   const [thana, setThana] = useState<string>("");
   const [villageAddress, setVillageAddress] = useState<string>("");
+  const [colorError, setColorError] = useState<string>("");
+  const colorSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<any>(null);
@@ -121,12 +123,12 @@ export default function CheckoutForm({
   }));
 
   const totalColorQty = selectedColorItems.reduce((sum, item) => sum + item.qty, 0);
-  const effectiveQuantity = totalColorQty > 0 ? totalColorQty : quantity;
+  const effectiveQuantity = totalColorQty;
 
   const selectedColorsSummary =
     selectedColorItems.length > 0
       ? selectedColorItems.map((c) => `${c.emoji} ${c.name} × ${c.qty}`).join(", ")
-      : `${activeColor} × ${effectiveQuantity}`;
+      : "কোনো কালার সিলেক্ট করা হয়নি";
 
   const activeVariantConfig = pricing?.colorVariants?.[activeColor] || {};
   const activePreviewImage =
@@ -135,11 +137,12 @@ export default function CheckoutForm({
 
   function updateColorQty(colorKey: ColorKey, delta: number) {
     setActiveColor(colorKey);
+    setColorError("");
     setColorQuantities((prev) => {
       const nextVal = Math.max(0, (prev[colorKey] || 0) + delta);
       const updated = { ...prev, [colorKey]: nextVal };
       const sum = Object.values(updated).reduce((a, b) => a + b, 0);
-      setQuantity(sum > 0 ? sum : 1);
+      setQuantity(sum);
       return updated;
     });
   }
@@ -180,6 +183,19 @@ export default function CheckoutForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    if (totalColorQty <= 0) {
+      setColorError(
+        "অর্ডার কনফার্ম করতে অন্তত একটি কালার সিলেক্ট করে পরিমাণ (+) বাড়ান।"
+      );
+      colorSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      return;
+    }
+
+    setColorError("");
     setLoading(true);
     const formData = new FormData(e.currentTarget);
 
