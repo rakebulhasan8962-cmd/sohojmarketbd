@@ -6,6 +6,76 @@ import { DynamicIcon } from "./DynamicIcon";
 import { bdLocations } from "@/lib/bdLocations";
 import { trackPixelEvent } from "@/lib/metaPixel";
 
+const COLOR_OPTIONS = [
+  { key: "Green", name: "Green", emoji: "💚", hex: "#22c55e" },
+  { key: "Pink", name: "Pink", emoji: "🩷", hex: "#ec4899" },
+  { key: "Purple", name: "Purple", emoji: "💜", hex: "#a855f7" },
+  { key: "Orange", name: "Orange", emoji: "💛", hex: "#f97316" },
+  { key: "Blue", name: "Blue", emoji: "💙", hex: "#3b82f6" },
+] as const;
+
+type ColorKey = (typeof COLOR_OPTIONS)[number]["key"];
+
+function findMatchingThanas(rawDistrict: string): string[] {
+  const source: any =
+    (bdLocations as any)?.default && typeof (bdLocations as any).default === "object"
+      ? (bdLocations as any).default
+      : (bdLocations as any)?.bdLocations && typeof (bdLocations as any).bdLocations === "object"
+      ? (bdLocations as any).bdLocations
+      : bdLocations;
+
+  if (!rawDistrict || !source || typeof source !== "object") {
+    return [];
+  }
+
+  const extractList = (val: any): string[] => {
+    if (Array.isArray(val)) {
+      return val
+        .map((item) =>
+          typeof item === "string"
+            ? item
+            : item?.name || item?.bn_name || item?.label || item?.title || ""
+        )
+        .filter(Boolean);
+    }
+    if (val && typeof val === "object") {
+      if (Array.isArray(val.thanas)) return extractList(val.thanas);
+      if (Array.isArray(val.upazilas)) return extractList(val.upazilas);
+      if (Array.isArray(val.areas)) return extractList(val.areas);
+    }
+    return [];
+  };
+
+  const trimmed = rawDistrict.trim();
+  const direct = extractList(source[trimmed]);
+  if (direct.length > 0) return direct;
+
+  const lower = trimmed.toLowerCase();
+  const keys = Object.keys(source);
+
+  const exactKey = keys.find((k) => k.trim().toLowerCase() === lower);
+  if (exactKey) {
+    const list = extractList(source[exactKey]);
+    if (list.length > 0) return list;
+  }
+
+  const partialKey = keys.find((k) => {
+    const kClean = k.trim().toLowerCase();
+    return kClean.includes(lower) || lower.includes(kClean);
+  });
+  if (partialKey) {
+    const list = extractList(source[partialKey]);
+    if (list.length > 0) return list;
+  }
+
+  return [];
+}
+
+function isDhakaDistrict(rawDistrict: string): boolean {
+  const val = rawDistrict.trim().toLowerCase();
+  return val === "ঢাকা" || val === "dhaka" || val.startsWith("ঢাকা ") || val.startsWith("dhaka ");
+}
+
 export default function CheckoutForm({
   pricing,
   isMobile = false,
@@ -15,6 +85,14 @@ export default function CheckoutForm({
 }) {
   const [shippingArea, setShippingArea] = useState<"inside" | "outside">("inside");
   const [quantity, setQuantity] = useState<number>(1);
+  const [activeColor, setActiveColor] = useState<ColorKey>("Green");
+  const [colorQuantities, setColorQuantities] = useState<Record<ColorKey, number>>({
+    Green: 0,
+    Pink: 0,
+    Purple: 0,
+    Orange: 0,
+    Blue: 0,
+  });
   const [district, setDistrict] = useState<string>("");
   const [thana, setThana] = useState<string>("");
   const [villageAddress, setVillageAddress] = useState<string>("");
@@ -29,8 +107,42 @@ export default function CheckoutForm({
 
   const ADMIN_WHATSAPP = pricing?.whatsappNumber || "8801639193531";
 
-  const districts = Object.keys(bdLocations);
-  const availableThanas = bdLocations[district] || [];
+  const districts = Object.keys(bdLocations || {});
+  const availableThanas = findMatchingThanas(district);
+
+  // নির্বাচিত কালার ও কোয়ান্টিটি যোগফল
+  const selectedColorItems = COLOR_OPTIONS.filter(
+    (c) => (colorQuantities[c.key] || 0) > 0
+  ).map((c) => ({
+    ...c,
+    qty: colorQuantities[c.key] || 0,
+    pin: pricing?.colorVariants?.[c.key]?.pin || "",
+    image: pricing?.colorVariants?.[c.key]?.image || "",
+  }));
+
+  const totalColorQty = selectedColorItems.reduce((sum, item) => sum + item.qty, 0);
+  const effectiveQuantity = totalColorQty > 0 ? totalColorQty : quantity;
+
+  const selectedColorsSummary =
+    selectedColorItems.length > 0
+      ? selectedColorItems.map((c) => `${c.emoji} ${c.name} × ${c.qty}`).join(", ")
+      : `${activeColor} × ${effectiveQuantity}`;
+
+  const activeVariantConfig = pricing?.colorVariants?.[activeColor] || {};
+  const activePreviewImage =
+    activeVariantConfig.image || pricing?.productImage || pricing?.heroImage || "";
+  const activePreviewPin = activeVariantConfig.pin || "";
+
+  function updateColorQty(colorKey: ColorKey, delta: number) {
+    setActiveColor(colorKey);
+    setColorQuantities((prev) => {
+      const nextVal = Math.max(0, (prev[colorKey] || 0) + delta);
+      const updated = { ...prev, [colorKey]: nextVal };
+      const sum = Object.values(updated).reduce((a, b) => a + b, 0);
+      setQuantity(sum > 0 ? sum : 1);
+      return updated;
+    });
+  }
 
   // আসল মূল্য ও ডিসকাউন্ট মূল্য নির্ধারণ
   const originalUnitPrice = Number(pricing?.originalPrice ?? pricing?.productPrice ?? 590);
@@ -51,8 +163,8 @@ export default function CheckoutForm({
         )
       : 0;
 
-  const subtotal = effectiveUnitPrice * quantity;
-  const originalSubtotal = originalUnitPrice * quantity;
+  const subtotal = effectiveUnitPrice * effectiveQuantity;
+  const originalSubtotal = originalUnitPrice * effectiveQuantity;
   const shippingFee =
     shippingArea === "inside" ? pricing.shippingInside : pricing.shippingOutside;
   const total = subtotal + shippingFee;
@@ -75,12 +187,14 @@ export default function CheckoutForm({
     const phone = formData.get("phone") as string;
     const fullAddress = `${villageAddress}, থানা: ${thana}, জেলা: ${district}`;
 
-    const result = await submitOrder({
+    const result = await (submitOrder as any)({
       name,
-      address: fullAddress,
+      address: `${fullAddress} | কালার: ${selectedColorsSummary}`,
       phone,
       shippingArea,
-      quantity,
+      quantity: effectiveQuantity,
+      selectedColors: selectedColorsSummary,
+      colorBreakdown: selectedColorItems,
       subtotal,
       shippingFee,
       total,
@@ -88,15 +202,20 @@ export default function CheckoutForm({
 
     if (result.success && result.order) {
       const displaySerial = formatOrderSerial(result.order.id);
-      setSubmittedOrder({ ...result.order, displaySerial });
+      setSubmittedOrder({
+        ...result.order,
+        displaySerial,
+        selectedColorsSummary,
+      });
 
       trackPixelEvent("Purchase", {
         content_name: pricing?.productName || "Grape Cluster Hanging Soap",
         value: Number(total) || 0,
         currency: "BDT",
-        num_items: Number(quantity) || 1,
+        num_items: Number(effectiveQuantity) || 1,
         order_id: String(displaySerial),
       });
+
       const shippingText =
         shippingArea === "inside"
           ? `ঢাকার ভিতরে (${shippingFee}৳)`
@@ -111,7 +230,8 @@ export default function CheckoutForm({
 *নাম:* ${name}
 *ফোন:* ${phone}
 *ঠিকানা:* ${fullAddress}
-*প্রোডাক্ট:* ${pricing.productName || "Hanging Hand Soap"} (× ${quantity})
+*প্রোডাক্ট:* ${pricing.productName || "Hanging Hand Soap"} (× ${effectiveQuantity})
+*কালার ও পরিমাণ:* ${selectedColorsSummary}
 *একক মূল্য:* ${priceLine}
 *ডেলিভারি:* ${shippingText}
 *সর্বমোট বিল:* ${total}৳
@@ -126,6 +246,13 @@ export default function CheckoutForm({
     setThana("");
     setVillageAddress("");
     setQuantity(1);
+    setColorQuantities({
+      Green: 0,
+      Pink: 0,
+      Purple: 0,
+      Orange: 0,
+      Blue: 0,
+    });
   }
 
   async function handleTrackOrder(e: React.FormEvent) {
@@ -153,13 +280,18 @@ export default function CheckoutForm({
           <h3 className="text-xl font-bold text-[#4B203D] mb-2">
             ধন্যবাদ, {submittedOrder.name}!
           </h3>
-          <p className="text-gray-700 text-sm mb-3">
+          <p className="text-gray-700 text-sm mb-2">
             অর্ডার আইডি:{" "}
             <strong>
               #{submittedOrder.displaySerial ?? formatOrderSerial(submittedOrder.id)}
             </strong>{" "}
             | পরিমাণ: <strong>{submittedOrder.quantity || 1}টি</strong>
           </p>
+          {submittedOrder.selectedColorsSummary && (
+            <p className="text-xs text-gray-600 mb-3">
+              কালার: <strong>{submittedOrder.selectedColorsSummary}</strong>
+            </p>
+          )}
           <div className="inline-block bg-white px-4 py-2.5 rounded-lg border border-gray-200 mb-4 text-xs">
             <span className="text-gray-600 mr-1">স্ট্যাটাস:</span>
             <span className="font-bold text-amber-600">
@@ -190,13 +322,13 @@ export default function CheckoutForm({
               অর্ডার করতে নিচের ফর্মটি সঠিক ভাবে পুরন করুন।
             </h2>
 
-            {/* মোবাইল ভিউতে সবসময় ১ কলাম (একটার নিচে আরেকটা), ডেস্কটপে ২ কলাম */}
+            {/* মোবাইল ভিউতে ১ কলাম, ডেস্কটপে ২ কলাম */}
             <div
               className={`grid grid-cols-1 ${
                 isMobile ? "gap-6" : "md:grid-cols-2 gap-10"
               } items-start`}
             >
-              {/* সেকশন ১: Billing details & Shipping */}
+              {/* সেকশন ১ (বাম কলাম): Billing details, Shipping ও কালার নির্বাচন */}
               <div className="flex flex-col space-y-5 w-full">
                 <div>
                   <h3 className="text-[17px] font-bold text-[#222222] mb-3">
@@ -230,7 +362,7 @@ export default function CheckoutForm({
                       />
                     </div>
 
-                    {/* জেলা ও থানা: মোবাইলে একটার নিচে আরেকটা */}
+                    {/* জেলা ও থানা */}
                     <div
                       className={`grid grid-cols-1 ${
                         isMobile ? "gap-3.5" : "sm:grid-cols-2 gap-3"
@@ -240,46 +372,62 @@ export default function CheckoutForm({
                         <label className="block text-[13px] font-medium text-gray-700 mb-1">
                           জেলা <span className="text-red-500">*</span>
                         </label>
-                        <input
+                        <select
                           required
-                          list="district-list"
                           value={district}
                           onChange={(e) => {
-                            setDistrict(e.target.value);
+                            const nextDistrict = e.target.value;
+                            setDistrict(nextDistrict);
                             setThana("");
-                            if (e.target.value === "ঢাকা") {
+                            if (isDhakaDistrict(nextDistrict)) {
                               setShippingArea("inside");
-                            } else if (e.target.value) {
+                            } else if (nextDistrict) {
                               setShippingArea("outside");
                             }
                           }}
-                          placeholder="জেলা সিলেক্ট বা লিখুন"
                           className="w-full border border-gray-300 rounded-md px-3 py-2 text-[14px] focus:outline-none focus:border-gray-500 bg-white"
-                        />
-                        <datalist id="district-list">
+                        >
+                          <option value="">জেলা সিলেক্ট করুন</option>
                           {districts.map((dist) => (
-                            <option key={dist} value={dist} />
+                            <option key={dist} value={dist}>
+                              {dist}
+                            </option>
                           ))}
-                        </datalist>
+                        </select>
                       </div>
 
                       <div className="w-full">
                         <label className="block text-[13px] font-medium text-gray-700 mb-1">
                           থানা / উপজেলা <span className="text-red-500">*</span>
                         </label>
-                        <input
-                          required
-                          list="thana-list"
-                          value={thana}
-                          onChange={(e) => setThana(e.target.value)}
-                          placeholder="থানা সিলেক্ট বা লিখুন"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-[14px] focus:outline-none focus:border-gray-500 bg-white"
-                        />
-                        <datalist id="thana-list">
-                          {availableThanas.map((th) => (
-                            <option key={th} value={th} />
-                          ))}
-                        </datalist>
+                        {availableThanas.length > 0 ? (
+                          <select
+                            required
+                            value={thana}
+                            onChange={(e) => setThana(e.target.value)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-[14px] focus:outline-none focus:border-gray-500 bg-white"
+                          >
+                            <option value="">থানা / উপজেলা সিলেক্ট করুন</option>
+                            {availableThanas.map((th) => (
+                              <option key={th} value={th}>
+                                {th}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            required
+                            type="text"
+                            value={thana}
+                            onChange={(e) => setThana(e.target.value)}
+                            placeholder={
+                              district
+                                ? "থানা / উপজেলার নাম লিখুন"
+                                : "আগে জেলা সিলেক্ট করুন"
+                            }
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-[14px] focus:outline-none focus:border-gray-500 bg-white"
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -299,7 +447,7 @@ export default function CheckoutForm({
                   </div>
                 </div>
 
-                {/* Shipping অপশন: একটার নিচে আরেকটা পরিষ্কারভাবে */}
+                {/* Shipping অপশন */}
                 <div className="w-full">
                   <h3 className="text-[17px] font-bold text-[#222222] mb-2.5">
                     Shipping
@@ -340,9 +488,103 @@ export default function CheckoutForm({
                     </label>
                   </div>
                 </div>
+
+                {/* ডান পাশ থেকে নামিয়ে আনা ৫টি কালার ও পরিমাণ নির্বাচন বক্স (বাম পাশের ফাঁকা জায়গা ভরাট করবে) */}
+                <div className="w-full space-y-2.5 bg-gray-50 border border-gray-200 rounded-xl p-3.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[15px] font-bold text-[#222222]">
+                      কালার ও পরিমাণ নির্বাচন করুন
+                    </h3>
+                    <span className="text-xs font-bold text-gray-700">
+                      মোট: {effectiveQuantity}টি
+                    </span>
+                  </div>
+
+                  {/* কালারে টাচ করলে ছবি ও পিন প্রিভিউ */}
+                  {(activePreviewImage || activePreviewPin) && (
+                    <div className="flex items-center gap-3 bg-[#F9F6F0] border border-[#E5DEC9] rounded-lg p-2">
+                      {activePreviewImage && (
+                        <img
+                          src={activePreviewImage}
+                          alt={activeColor}
+                          className="w-12 h-12 rounded-md object-cover border border-gray-200 shrink-0"
+                        />
+                      )}
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-gray-900">
+                          {activeColor}
+                        </span>
+                        {activePreviewPin && (
+                          <span className="inline-block w-fit mt-0.5 bg-amber-100 text-amber-900 text-[11px] font-bold px-2 py-0.5 rounded border border-amber-300">
+                            📌 {activePreviewPin}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col divide-y divide-gray-200 bg-white border border-gray-200 rounded-lg px-2.5">
+                    {COLOR_OPTIONS.map((clr) => {
+                      const qtyVal = colorQuantities[clr.key] || 0;
+                      const isActive = activeColor === clr.key;
+                      const clrPin = pricing?.colorVariants?.[clr.key]?.pin || "";
+                      return (
+                        <div
+                          key={clr.key}
+                          onClick={() => setActiveColor(clr.key)}
+                          className={`flex items-center justify-between gap-2 py-2 px-1 cursor-pointer transition-colors ${
+                            isActive ? "bg-amber-50/50" : ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0 border border-black/15"
+                              style={{ backgroundColor: clr.hex }}
+                            />
+                            <span className="text-xs font-semibold text-gray-800 truncate">
+                              {clr.emoji} {clr.name}
+                            </span>
+                            {clrPin && (
+                              <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded shrink-0">
+                                {clrPin}
+                              </span>
+                            )}
+                          </div>
+
+                          <div
+                            className="inline-flex items-center border border-gray-300 rounded bg-gray-50 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => updateColorQty(clr.key, -1)}
+                              className="px-2.5 py-0.5 text-gray-700 hover:bg-gray-200 font-bold cursor-pointer"
+                            >
+                              -
+                            </button>
+                            <span className="px-2.5 py-0.5 text-xs font-semibold text-gray-900 bg-white border-x border-gray-300">
+                              {qtyVal}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateColorQty(clr.key, 1)}
+                              className="px-2.5 py-0.5 text-gray-700 hover:bg-gray-200 font-bold cursor-pointer"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="text-[11px] text-gray-700 pt-0.5 truncate">
+                    নির্বাচিত: <strong>{selectedColorsSummary}</strong>
+                  </div>
+                </div>
               </div>
 
-              {/* সেকশন ২: Your order (মোবাইলে Billing details-এর ঠিক নিচে পুরো প্রস্থ জুড়ে) */}
+              {/* সেকশন ২ (ডান কলাম): Your order */}
               <div className="flex flex-col w-full">
                 <h3 className="text-[17px] font-bold text-[#222222] mb-3">
                   Your order
@@ -354,7 +596,7 @@ export default function CheckoutForm({
                     <span>Subtotal</span>
                   </div>
 
-                  {/* প্রোডাক্ট, ডিসকাউন্ট হাইলাইট লাইন + ১ অক্ষরের স্টিকার ও পরিমাণ */}
+                  {/* প্রোডাক্ট, ডিসকাউন্ট ও নির্বাচিত কালারের সারাংশ */}
                   <div className="py-2.5 border-b border-gray-200 flex flex-col gap-2 text-[14px]">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex flex-col gap-1.5">
@@ -388,6 +630,13 @@ export default function CheckoutForm({
                               {effectiveUnitPrice}৳
                             </span>
                           )}
+                          <span className="text-gray-500 ml-1.5">
+                            × {effectiveQuantity}টি
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1">
+                          কালার: <strong>{selectedColorsSummary}</strong>
                         </div>
                       </div>
 
@@ -401,29 +650,6 @@ export default function CheckoutForm({
                           {subtotal}৳
                         </span>
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="inline-flex items-center border border-gray-300 rounded bg-gray-50">
-                        <button
-                          type="button"
-                          onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                          className="px-3 py-1 text-gray-700 hover:bg-gray-200 font-bold cursor-pointer"
-                        >
-                          -
-                        </button>
-                        <span className="px-3.5 py-1 text-sm font-semibold text-gray-900 bg-white border-x border-gray-300">
-                          {quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setQuantity((q) => q + 1)}
-                          className="px-3 py-1 text-gray-700 hover:bg-gray-200 font-bold cursor-pointer"
-                        >
-                          +
-                        </button>
-                      </div>
-                      <span className="text-xs text-gray-500">× {quantity}</span>
                     </div>
                   </div>
 
@@ -445,7 +671,7 @@ export default function CheckoutForm({
                     <span>{total}৳</span>
                   </div>
 
-                  {/* ক্যাশ অন ডেলিভারি: একটার নিচে আরেকটা */}
+                  {/* ক্যাশ অন ডেলিভারি */}
                   <div className="mt-1 bg-[#F9F6F0] border border-[#E5DEC9] rounded-lg p-3.5 flex flex-col space-y-2">
                     <div className="font-bold text-[14px] text-gray-900">
                       ক্যাশ অন ডেলিভারি

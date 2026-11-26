@@ -2421,7 +2421,62 @@ export default function LandingView({
                         <span>{computedDiscountedPrice}৳</span>
                       </div>
                     </div>
+<div className="mt-3 pt-3 border-t border-stone-800 space-y-2">
+  <div className="text-[11px] font-bold text-stone-200">
+    কালার ভ্যারিয়েন্ট ছবি ও পিন (Green, Pink, Purple, Orange, Blue)
+  </div>
+
+  {[
+    { key: "Green", label: "💚 Green", dot: "#22c55e" },
+    { key: "Pink", label: "🩷 Pink", dot: "#ec4899" },
+    { key: "Purple", label: "💜 Purple", dot: "#a855f7" },
+    { key: "Orange", label: "💛 Orange", dot: "#f97316" },
+    { key: "Blue", label: "💙 Blue", dot: "#3b82f6" },
+  ].map((clr) => {
+    const currentVariant = pricing?.colorVariants?.[clr.key] || {};
+    return (
+      <div
+        key={clr.key}
+        className="bg-stone-900 border border-stone-800 rounded p-2 space-y-1.5"
+      >
+        <div className="flex items-center justify-between text-[11px] font-bold text-white">
+          <span className="flex items-center gap-1.5">
+            <span
+              className="w-2.5 h-2.5 rounded-full inline-block"
+              style={{ backgroundColor: clr.dot }}
+            />
+            {clr.label}
+          </span>
+          <span className="text-[10px] text-stone-400">Pin + Photo</span>
+        </div>
+
+        <input
+          type="text"
+          value={currentVariant.pin || ""}
+          placeholder={`${clr.key} পিন টেক্সট (যেমন: Best Seller / New)`}
+          onChange={(e) =>
+            applyContentChange(`pricing.colorVariants.${clr.key}.pin`, e.target.value)
+          }
+          className="w-full bg-stone-950 border border-stone-700 rounded px-2 py-1 text-[11px] text-white"
+        />
+
+        <input
+          type="text"
+          value={currentVariant.image || ""}
+          placeholder={`${clr.key} ছবির URL বা আপলোড লিংক`}
+          onChange={(e) =>
+            applyContentChange(`pricing.colorVariants.${clr.key}.image`, e.target.value)
+          }
+          className="w-full bg-stone-950 border border-stone-700 rounded px-2 py-1 text-[11px] text-white"
+        />
+      </div>
+    );
+  })}
+</div>
+
+            
                   </div>
+                  
                 )}
 
                 {/* Add Box প্যানেল — শুধু ছবি সহ ৪টি অপশন */}
@@ -3847,8 +3902,9 @@ isMobileSim ? 22 : Math.min(globalHeroTitleSize, 36),
               >
                 {(() => {
                   const st = getElStyle("btnOrder");
-                  const w = clampNum(st.width, 80, 420, 180);
-                  const h = clampNum(st.height, 36, 120, 48);
+const w = clampNum(st.width, 80, 420, 180);
+const btnW = isMobileSim ? Math.min(w, 155) : w;
+const h = clampNum(st.height, 36, 120, 48);
                   return (
                     
                       <a
@@ -3882,10 +3938,11 @@ isMobileSim ? 22 : Math.min(globalHeroTitleSize, 36),
                           isMobileSim ? 13 : 16
                         )}px`,
                         fontFamily: st.fontFamily || "inherit",
-                        fontWeight: st.bold ? 800 : 700,
-                        fontStyle: st.italic ? "italic" : "normal",
-                        width: st.width ? `${w}px` : undefined,
-                        height: st.height ? `${h}px` : undefined,
+fontWeight: st.bold ? 800 : 700,
+fontStyle: st.italic ? "italic" : "normal",
+width: `${btnW}px`,
+maxWidth: "100%",
+height: st.height ? `${h}px` : undefined,
                         borderRadius: `${
                           st.borderRadius ??
                           Math.max(10, globalBorderRadius * 0.55)
@@ -3920,8 +3977,9 @@ isMobileSim ? 22 : Math.min(globalHeroTitleSize, 36),
 
                 {(() => {
                   const st = getElStyle("btnMore");
-                  const w = clampNum(st.width, 80, 420, 160);
-                  const h = clampNum(st.height, 36, 120, 48);
+const w = clampNum(st.width, 80, 420, 160);
+const btnW = isMobileSim ? Math.min(w, 145) : w;
+const h = clampNum(st.height, 36, 120, 48);
                   return (
                     <a
                       href={isEditMode ? undefined : "#details"}
@@ -3949,7 +4007,8 @@ isMobileSim ? 22 : Math.min(globalHeroTitleSize, 36),
                         fontFamily: st.fontFamily || "inherit",
                         fontWeight: st.bold ? 800 : 700,
                         fontStyle: st.italic ? "italic" : "normal",
-                        width: st.width ? `${w}px` : undefined,
+                       width: `${btnW}px`,
+maxWidth: "100%",
                         height: st.height ? `${h}px` : undefined,
                         borderRadius: `${
                           st.borderRadius ??
